@@ -7,11 +7,11 @@ use crate::services::media::MediaSession;
 /// Checks for the '.pending_reset' flag and cleans up WebView/cache directories if found.
 pub fn check_pending_reset() {
     let app_data = if cfg!(target_os = "windows") {
-        std::env::var("APPDATA").ok().map(|d| std::path::PathBuf::from(d).join("com.xacnio.radikodesktop"))
+        std::env::var("APPDATA").ok().map(|d| std::path::PathBuf::from(d).join("dev.xacnio.radikodesktop"))
     } else if cfg!(target_os = "macos") {
-        std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join("Library/Application Support/com.xacnio.radikodesktop"))
+        std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join("Library/Application Support/dev.xacnio.radikodesktop"))
     } else {
-        std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join(".local/share/com.xacnio.radikodesktop"))
+        std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join(".local/share/dev.xacnio.radikodesktop"))
     };
 
     if let Some(data_dir) = app_data {
@@ -29,11 +29,11 @@ pub fn check_pending_reset() {
             
             // Delete cache directory
             let cache_dir = if cfg!(target_os = "windows") {
-                std::env::var("LOCALAPPDATA").ok().map(|d| std::path::PathBuf::from(d).join("com.xacnio.radikodesktop"))
+                std::env::var("LOCALAPPDATA").ok().map(|d| std::path::PathBuf::from(d).join("dev.xacnio.radikodesktop"))
             } else if cfg!(target_os = "macos") {
-                std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join("Library/Caches/com.xacnio.radikodesktop"))
+                std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join("Library/Caches/dev.xacnio.radikodesktop"))
             } else {
-                std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join(".cache/com.xacnio.radikodesktop"))
+                std::env::var("HOME").ok().map(|d| std::path::PathBuf::from(d).join(".cache/dev.xacnio.radikodesktop"))
             };
             
             if let Some(cache) = cache_dir {
@@ -127,14 +127,14 @@ pub fn setup_os_media_controls(app: &App) {
             extern "system" {
                 fn SetCurrentProcessExplicitAppUserModelID(app_id: *const u16) -> i32;
             }
-            let app_id: Vec<u16> = "com.xacnio.radikodesktop\0".encode_utf16().collect();
+            let app_id: Vec<u16> = "dev.xacnio.radikodesktop\0".encode_utf16().collect();
             unsafe {
                 SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr());
             }
 
             // Create Start Menu shortcut with AppUserModelID
             // so that SMTC can resolve the app name from the shortcut
-            platform::shortcut::ensure_start_menu_shortcut("com.xacnio.radikodesktop", "Radiko Desktop");
+            platform::shortcut::ensure_start_menu_shortcut("dev.xacnio.radikodesktop", "Radiko Desktop");
 
             if let Ok(hwnd) = window.hwnd() {
                 let hwnd_ptr = hwnd.0;

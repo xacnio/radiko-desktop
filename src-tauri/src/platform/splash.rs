@@ -137,7 +137,7 @@ mod win32 {
             let mut lang_code = String::new();
             if let Ok(app_data) = std::env::var("APPDATA") {
                 let settings_path = std::path::Path::new(&app_data)
-                    .join("com.xacnio.radikodesktop")
+                    .join("dev.xacnio.radikodesktop")
                     .join("settings.json");
                 if let Ok(content) = std::fs::read_to_string(settings_path) {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
