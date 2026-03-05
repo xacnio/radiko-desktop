@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Deep obsidian background -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#27272a" />
+      <stop offset="100%" stop-color="#09090b" />
+    </linearGradient>
+    
+    <!-- Bold energetic emerald green -->
+    <linearGradient id="green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <!-- Deep cutout shadow/black for elements -->
+    <linearGradient id="cutout" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#18181b" />
+      <stop offset="100%" stop-color="#000000" />
+    </linearGradient>
+
+    <filter id="shadow" y="-10%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Base Icon Background (Squircle) -->
+  <rect width="512" height="512" rx="114" fill="url(#bg)" />
+
+  <g filter="url(#shadow)">
+    <!-- Modern Chunky Antenna -->
+    <line x1="346" y1="166" x2="420" y2="70" stroke="url(#green)" stroke-width="24" stroke-linecap="round" />
+    <circle cx="420" cy="70" r="12" fill="#34d399" />
+    
+    <!-- Main Minimalist Radio Body -->
+    <rect x="66" y="146" width="380" height="240" rx="56" fill="url(#green)" />
+  </g>
+
+  <!-- Big Solid Speaker Subwoofer Style -->
+  <circle cx="166" cy="266" r="72" fill="url(#cutout)" />
+  <!-- Inner speaker cap -->
+  <circle cx="166" cy="266" r="30" fill="#27272a" />
+
+  <!-- Clean Pill-Shaped Frequency Screen -->
+  <rect x="296" y="186" width="100" height="48" rx="24" fill="url(#cutout)" />
+  <!-- Neon Tuning Indicator -->
+  <rect x="342" y="198" width="8" height="24" rx="4" fill="#34d399" />
+
+  <!-- Huge Volume/Tuning Dial -->
+  <circle cx="346" cy="296" r="44" fill="url(#cutout)" />
+  <!-- Dial Notch Indicator -->
+  <circle cx="346" cy="268" r="8" fill="#34d399" />
+</svg>

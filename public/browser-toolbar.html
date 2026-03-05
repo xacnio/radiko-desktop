@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        html,
+        body {
+            height: 70px;
+            overflow: hidden;
+            background: var(--bg-primary, #111111);
+        }
+
+        /* Drag region covering the entire top bar */
+        .drag-region {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 8px;
+        }
+
+        /* Mac OS Traffic Lights */
+        .mac-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            -webkit-app-region: no-drag;
+            padding-top: 4px;
+        }
+
+        .mac-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mac-btn svg {
+            width: 8px;
+            height: 8px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .mac-controls:hover .mac-btn svg {
+            opacity: 0.6;
+        }
+
+        .mac-close {
+            background: #ff5f56;
+            border: 1px solid #e0443e;
+        }
+
+        .mac-min {
+            background: #ffbd2e;
+            border: 1px solid #dea123;
+        }
+
+        .mac-max {
+            background: #27c93f;
+            border: 1px solid #1aab29;
+        }
+
+        .bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 12px 6px 12px;
+            border-bottom: 1px solid var(--border, #262626);
+        }
+
+        .btn {
+            -webkit-app-region: no-drag;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-muted, #777);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+
+        .btn:hover {
+            background: var(--bg-surface-hover, #2a2a2a);
+            color: var(--text-primary, #fff);
+        }
+
+        .btn:active {
+            transform: scale(0.93);
+        }
+
+        .btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .url {
+            -webkit-app-region: no-drag;
+            flex: 1;
+            height: 32px;
+            background: var(--bg-surface, #222);
+            border: 1px solid var(--border, #262626);
+            border-radius: 8px;
+            color: var(--text-primary, #fff);
+            font-size: 13px;
+            padding: 0 12px;
+            outline: none;
+            transition: border-color 0.2s;
+            -webkit-user-select: text;
+            user-select: text;
+            min-width: 0;
+            text-align: center;
+        }
+
+        .url:focus {
+            border-color: var(--accent, #1DB954);
+            background: var(--bg-primary, #111111);
+            text-align: left;
+        }
+
+        /* Loading Progress Bar */
+        #progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--accent, #1DB954);
+            transition: width 0.3s, opacity 0.3s;
+            opacity: 0;
+        }
+
+        body.is-loading #progress {
+            opacity: 1;
+            width: 100%;
+            animation: loading-pulse 2s infinite ease-in-out;
+        }
+
+        @keyframes loading-pulse {
+            0% {
+                opacity: 0.4;
+                width: 0%;
+            }
+
+            50% {
+                opacity: 1;
+                width: 70%;
+            }
+
+            100% {
+                opacity: 0.4;
+                width: 100%;
+            }
+        }
+
+        /* Toggle Reload/Stop */
+        #reload-icon {
+            display: block;
+        }
+
+        #stop-icon {
+            display: none;
+        }
+
+        body.is-loading #reload-icon {
+            display: none;
+        }
+
+        body.is-loading #stop-icon {
+            display: block;
+        }
+
+        body.is-loading #reload {
+            color: #ef4444;
+            /* danger */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="drag-region" data-tauri-drag-region></div>
+
+    <div class="bar">
+        <button class="btn" id="back" title="Back">
+            <svg viewBox="0 0 24 24">
+                <path d="M15 18l-6-6 6-6" />
+            </svg>
+        </button>
+        <button class="btn" id="fwd" title="Forward">
+            <svg viewBox="0 0 24 24">
+                <path d="M9 18l6-6-6-6" />
+            </svg>
+        </button>
+        <button class="btn" id="reload" title="Reload / Stop">
+            <svg id="reload-icon" viewBox="0 0 24 24">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+            </svg>
+            <svg id="stop-icon" viewBox="0 0 24 24">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <input type="text" class="url" id="urlbar" value="https://www.google.com" spellcheck="false">
+        <button class="btn" id="home" title="Home">
+            <svg viewBox="0 0 24 24">
+                <path
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2" />
+            </svg>
+        </button>
+        <div id="progress"></div>
+    </div>
+
+    <script>
+        (function () {
+            var I = window.__TAURI_INTERNALS__;
+            if (!I) { console.error('Tauri IPC not available'); return; }
+            var invoke = I.invoke.bind(I);
+
+            var ACCENT_COLORS = {
+                green: { dark: [29, 185, 84], light: [25, 156, 71] },
+                purple: { dark: [168, 85, 247], light: [147, 51, 234] },
+                yellow: { dark: [234, 179, 8], light: [202, 138, 4] },
+                blue: { dark: [59, 130, 246], light: [37, 99, 235] },
+                red: { dark: [239, 68, 68], light: [220, 38, 38] },
+                orange: { dark: [249, 115, 22], light: [234, 88, 12] },
+                pink: { dark: [236, 72, 153], light: [219, 39, 119] },
+                sky: { dark: [14, 165, 233], light: [2, 132, 199] },
+                indigo: { dark: [99, 102, 241], light: [79, 70, 229] },
+                teal: { dark: [20, 184, 166], light: [13, 148, 136] },
+                slate: { dark: [148, 163, 184], light: [100, 116, 139] },
+            };
+
+            function applyTheme() {
+                try {
+                    var raw = localStorage.getItem('rx_ui_state');
+                    var ui = raw ? JSON.parse(raw) : {};
+                    var themeSetting = ui.theme || 'system';
+                    var isLight = themeSetting === 'light' ? true :
+                        (themeSetting === 'dark' ? false :
+                            window.matchMedia('(prefers-color-scheme: light)').matches);
+                    var accent = ui.accentColor || 'green';
+                    var s = document.documentElement.style;
+
+                    if (isLight) {
+                        s.setProperty('--bg-primary', '#f5f5f5');
+                        s.setProperty('--bg-surface', '#e6e6e6');
+                        s.setProperty('--bg-surface-hover', '#d9d9d9');
+                        s.setProperty('--text-primary', '#111111');
+                        s.setProperty('--text-muted', '#777777');
+                        s.setProperty('--border', '#cccccc');
+                    } else {
+                        s.setProperty('--bg-primary', '#111111');
+                        s.setProperty('--bg-surface', '#222222');
+                        s.setProperty('--bg-surface-hover', '#2a2a2a');
+                        s.setProperty('--text-primary', '#f5f5f5');
+                        s.setProperty('--text-muted', '#666666');
+                        s.setProperty('--border', '#262626');
+                    }
+
+                    var ac = ACCENT_COLORS[accent] || ACCENT_COLORS.green;
+                    var rgb = isLight ? ac.light : ac.dark;
+                    s.setProperty('--accent', 'rgb(' + rgb.join(',') + ')');
+                } catch (e) { }
+            }
+
+            function loadTranslations() {
+                invoke('get_settings').then(function (settings) {
+                    var lang = (settings && settings.language) || 'en';
+                    fetch('/locales/' + lang + '.json')
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            var t = (data && data.browser) || {};
+                            if (t.back) document.getElementById('back').title = t.back;
+                            if (t.forward) document.getElementById('fwd').title = t.forward;
+                            if (t.reloadStop) document.getElementById('reload').title = t.reloadStop;
+                            if (t.home) document.getElementById('home').title = t.home;
+                        })
+                        .catch(function () { });
+                }).catch(function () { });
+            }
+
+            var reloadBtn = document.getElementById('reload');
+
+            document.getElementById('back').onclick = function () { invoke('browser_back'); };
+            document.getElementById('fwd').onclick = function () { invoke('browser_forward'); };
+
+            reloadBtn.onclick = function () {
+                if (document.body.classList.contains('is-loading')) {
+                    invoke('browser_stop');
+                } else {
+                    invoke('browser_reload');
+                }
+            };
+
+            document.getElementById('home').onclick = function () { invoke('browser_navigate', { url: 'https://www.google.com' }); };
+
+            document.querySelector('.drag-region').addEventListener('mousedown', function (e) {
+                if (e.buttons === 1) {
+                    invoke('drag_browser_window');
+                }
+            });
+
+            var ub = document.getElementById('urlbar');
+            ub.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    var v = ub.value.trim();
+                    if (v && v.indexOf('://') < 0) v = 'https://' + v;
+                    invoke('browser_navigate', { url: v });
+                    ub.blur();
+                }
+            });
+
+            // Sync URL
+            setInterval(function () {
+                if (document.activeElement !== ub) {
+                    invoke('browser_get_url').then(function (url) {
+                        if (url) ub.value = url;
+                    }).catch(function () { });
+                }
+            }, 1000);
+
+            window.setLoading = function (isLoading) {
+                if (isLoading) {
+                    document.body.classList.add('is-loading');
+                } else {
+                    document.body.classList.remove('is-loading');
+                }
+            };
+
+            applyTheme();
+            loadTranslations();
+
+            // Listen for system theme changes to auto-update
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+        })();
+    </script>
+</body>
+
+</html>

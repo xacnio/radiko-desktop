@@ -1,0 +1,195 @@
+name: 'Build & Release'
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Step 0: Check if we should release ───────────────────────────
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      is_new_version: ${{ steps.check.outputs.is_new }}
+      new_tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check version
+        id: check
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "is_new=false" >> $GITHUB_OUTPUT
+            echo "Version $VERSION already tagged. Skipping release steps."
+          else
+            echo "is_new=true" >> $GITHUB_OUTPUT
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "New version $VERSION detected. Release will be created."
+          fi
+
+  # ── Step 1: Build frontend once ──────────────────────────────────
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+      - name: Install dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 1
+
+  # ── Step 2: Build native binaries ───────────────────────────────
+  build-tauri:
+    needs: [check-version, build-frontend]
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+            rust-targets: 'x86_64-pc-windows-msvc'
+            cache-key: 'win-x64'
+
+          - platform: 'windows-latest'
+            args: '--target aarch64-pc-windows-msvc'
+            rust-targets: 'aarch64-pc-windows-msvc'
+            cache-key: 'win-arm64'
+
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            cache-key: 'macos-universal'
+
+          - platform: 'ubuntu-22.04'
+            args: '--target x86_64-unknown-linux-gnu'
+            rust-targets: 'x86_64-unknown-linux-gnu'
+            cache-key: 'linux-x64'
+
+          - platform: 'ubuntu-22.04'
+            args: '--target aarch64-unknown-linux-gnu'
+            rust-targets: 'aarch64-unknown-linux-gnu'
+            cache-key: 'linux-arm64'
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies (x64)
+        if: matrix.cache-key == 'linux-x64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+      - name: Install Linux cross-compile dependencies (arm64)
+        if: matrix.cache-key == 'linux-arm64'
+        run: |
+          sudo dpkg --add-architecture arm64
+          # Add arm64 sources from ports.ubuntu.com
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ jammy main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ jammy-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
+          # Restrict existing sources to amd64 only
+          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu patchelf \
+            libgtk-3-dev:arm64 libwebkit2gtk-4.1-dev:arm64 libappindicator3-dev:arm64 \
+            librsvg2-dev:arm64 libasound2-dev:arm64
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
+          echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - name: Cache Cargo.lock
+        id: cargo-lock-cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/Cargo.lock
+          key: cargo-lock-${{ matrix.cache-key }}-${{ hashFiles('src-tauri/Cargo.toml') }}
+      - name: Generate Cargo.lock
+        if: steps.cargo-lock-cache.outputs.cache-hit != 'true'
+        run: cargo generate-lockfile
+        working-directory: src-tauri
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: ${{ matrix.cache-key }}
+      
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Skip frontend build
+        run: node -e "const f='src-tauri/tauri.conf.json';const j=JSON.parse(require('fs').readFileSync(f,'utf8'));j.build.beforeBuildCommand='';require('fs').writeFileSync(f,JSON.stringify(j,null,4))"
+
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.check-version.outputs.new_tag }}
+          releaseName: "Radiko Desktop ${{ needs.check-version.outputs.new_tag }}"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+          includeRelease: ${{ needs.check-version.outputs.is_new_version == 'true' }}
+
+  # ── Step 3: Finalize ─────────────────────────────────────────────
+  finalize-release:
+    if: needs.check-version.outputs.is_new_version == 'true'
+    needs: [check-version, build-tauri]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update Release Description
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          gh release edit "$TAG" --notes "Automatically generated release for $TAG"

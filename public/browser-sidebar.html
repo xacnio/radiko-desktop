@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body {
+            background: var(--bg-primary, #111111);
+            color: var(--text-primary, #f5f5f5);
+            height: 100vh;
+            overflow-y: auto;
+            border-left: 1px solid var(--border, #262626);
+        }
+
+        .header {
+            height: 70px;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--border, #262626);
+            font-weight: 600;
+            font-size: 15px;
+            background: var(--bg-secondary, #1a1a1a);
+            color: var(--text-primary, #fff);
+            -webkit-app-region: drag;
+        }
+
+        .list {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .item {
+            background: var(--bg-secondary, #1a1a1a);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 1px solid var(--border, #262626);
+        }
+
+        .item-title {
+            font-size: 13px;
+            font-weight: 500;
+            word-break: break-all;
+            color: var(--text-primary, #fff);
+        }
+
+        .item-url {
+            font-size: 11px;
+            color: var(--text-muted, #666);
+            word-break: break-all;
+        }
+
+        .item-btn {
+            background: var(--accent, #1DB954);
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+            align-self: flex-start;
+        }
+
+        .item-btn:hover {
+            opacity: 0.85;
+        }
+
+        .empty {
+            padding: 24px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted, #666);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header" id="header">Detected Radios</div>
+    <div class="list" id="list">
+        <div class="empty" id="empty-msg">No radio found on this page.<br><br>When you start a player, it will appear
+            here.</div>
+    </div>
+
+    <script>
+        (function () {
+            var I = window.__TAURI_INTERNALS__;
+            var streams = [];
+            var listEl = document.getElementById('list');
+            var t = {};
+
+            var ACCENT_COLORS = {
+                green: { dark: [29, 185, 84], light: [25, 156, 71] },
+                purple: { dark: [168, 85, 247], light: [147, 51, 234] },
+                yellow: { dark: [234, 179, 8], light: [202, 138, 4] },
+                blue: { dark: [59, 130, 246], light: [37, 99, 235] },
+                red: { dark: [239, 68, 68], light: [220, 38, 38] },
+                orange: { dark: [249, 115, 22], light: [234, 88, 12] },
+                pink: { dark: [236, 72, 153], light: [219, 39, 119] },
+                sky: { dark: [14, 165, 233], light: [2, 132, 199] },
+                indigo: { dark: [99, 102, 241], light: [79, 70, 229] },
+                teal: { dark: [20, 184, 166], light: [13, 148, 136] },
+                slate: { dark: [148, 163, 184], light: [100, 116, 139] },
+            };
+
+            function applyTheme() {
+                try {
+                    var raw = localStorage.getItem('rx_ui_state');
+                    var ui = raw ? JSON.parse(raw) : {};
+                    var themeSetting = ui.theme || 'system';
+                    var isLight = themeSetting === 'light' ? true :
+                        (themeSetting === 'dark' ? false :
+                            window.matchMedia('(prefers-color-scheme: light)').matches);
+                    var accent = ui.accentColor || 'green';
+                    var s = document.documentElement.style;
+
+                    if (isLight) {
+                        s.setProperty('--bg-primary', '#f5f5f5');
+                        s.setProperty('--bg-secondary', '#ffffff');
+                        s.setProperty('--bg-surface', '#e6e6e6');
+                        s.setProperty('--text-primary', '#111111');
+                        s.setProperty('--text-muted', '#777777');
+                        s.setProperty('--border', '#cccccc');
+                    } else {
+                        s.setProperty('--bg-primary', '#111111');
+                        s.setProperty('--bg-secondary', '#1a1a1a');
+                        s.setProperty('--bg-surface', '#222222');
+                        s.setProperty('--text-primary', '#f5f5f5');
+                        s.setProperty('--text-muted', '#666666');
+                        s.setProperty('--border', '#262626');
+                    }
+
+                    var ac = ACCENT_COLORS[accent] || ACCENT_COLORS.green;
+                    var rgb = isLight ? ac.light : ac.dark;
+                    s.setProperty('--accent', 'rgb(' + rgb.join(',') + ')');
+                } catch (e) { }
+            }
+
+            function loadTranslations() {
+                if (!I) return;
+                I.invoke('get_settings').then(function (settings) {
+                    var lang = (settings && settings.language) || 'en';
+                    fetch('/locales/' + lang + '.json')
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            t = (data && data.browser) || {};
+                            applyTranslations();
+                        })
+                        .catch(function () { });
+                }).catch(function () { });
+            }
+
+            function applyTranslations() {
+                if (t.detectedRadios) document.getElementById('header').textContent = t.detectedRadios;
+                var emptyEl = document.getElementById('empty-msg');
+                if (emptyEl && t.noRadioFound) {
+                    emptyEl.innerHTML = t.noRadioFound + '<br><br>' + (t.noRadioFoundSub || '');
+                }
+                render();
+            }
+
+            window.addStream = function (data) {
+                if (data.url.startsWith('blob:') || data.url.startsWith('data:')) return;
+                if (streams.find(s => s.url === data.url)) return;
+                streams.push(data);
+                render();
+            };
+
+            function render() {
+                if (streams.length === 0) return;
+                listEl.innerHTML = '';
+                streams.forEach(function (s) {
+                    var div = document.createElement('div');
+                    div.className = 'item';
+
+                    var title = document.createElement('div');
+                    title.className = 'item-title';
+                    title.textContent = s.name;
+
+                    var url = document.createElement('div');
+                    url.className = 'item-url';
+                    url.textContent = s.url.substring(0, 60) + (s.url.length > 60 ? '...' : '');
+
+                    var btn = document.createElement('button');
+                    btn.className = 'item-btn';
+                    btn.textContent = t.addRadio || 'Add Radio';
+                    btn.onclick = function () {
+                        if (I) {
+                            I.invoke('send_radio_detect', { stream: s }).then(function () {
+                                I.invoke('close_browser_window');
+                            }).catch(function () {
+                                I.invoke('close_browser_window');
+                            });
+                        }
+                    };
+
+                    div.appendChild(title);
+                    div.appendChild(url);
+                    div.appendChild(btn);
+                    listEl.appendChild(div);
+                });
+            }
+
+            applyTheme();
+            loadTranslations();
+
+            // Listen for system theme changes to auto-update
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+        })();
+    </script>
+</body>
+
+</html>

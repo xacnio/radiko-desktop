@@ -1,0 +1,8 @@
+node_modules/
+dist/
+target/
+Cargo.lock
+*.log
+updater.key
+updater.key.pub
+.DS_Store

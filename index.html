@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' asset: https://asset.localhost http://asset.localhost data: blob: https:; connect-src 'self' http://localhost:1420 ws://localhost:1420 ws://localhost:1421 https: http:;" />
+    <title>Radiko Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            background-color: #111111;
+            overflow: hidden;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes pulse-opacity {
+
+            0%,
+            100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 0.85;
+            }
+        }
+
+        .splash-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            justify-content: center;
+            align-items: center;
+            gap: 18px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .splash-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #1db954 0%, #14833c 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse-opacity 2s ease-in-out infinite;
+        }
+
+        .splash-icon svg {
+            width: 22px;
+            height: 22px;
+            color: white;
+        }
+
+        .splash-spinner {
+            animation: spin 1s linear infinite;
+            opacity: 0.35;
+            color: #888;
+        }
+    </style>
+    <!-- Theme detection MUST run before any paint to prevent flash -->
+    <script>
+        (function () {
+            try {
+                var raw = localStorage.getItem('rx_ui_state');
+                var ui = raw ? JSON.parse(raw) : {};
+                var t = ui.theme || 'system';
+                var isLight = t === 'light' || (t === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+                if (isLight) {
+                    document.documentElement.style.backgroundColor = '#f5f5f5';
+                    document.body.style.backgroundColor = '#f5f5f5';
+                }
+            } catch (e) { }
+        })();
+    </script>
+    <div id="root">
+        <div class="splash-container">
+            <div class="splash-icon">
+                <img src="/icon.svg" alt="" style="width:100%;height:100%;object-fit:contain;" />
+            </div>
+            <svg class="splash-spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+            </svg>
+        </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

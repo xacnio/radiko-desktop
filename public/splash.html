@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            background: var(--bg-primary, #0d0d0d);
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: background 0.3s;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        }
+
+        .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 9px;
+            object-fit: contain;
+        }
+
+        .title {
+            color: var(--text-primary, #f0f0f0);
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 16px;
+        }
+
+        .subtitle {
+            color: #6e6e6e;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .bar-track {
+            width: 200px;
+            height: 3px;
+            background: var(--track-color, #1e1e1e);
+            border-radius: 2px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            width: 60px;
+            height: 100%;
+            background: #10b981;
+            border-radius: 2px;
+            animation: slide 2s ease-in-out infinite;
+        }
+
+        @keyframes slide {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            50% {
+                transform: translateX(140px);
+            }
+        }
+
+        @keyframes dots {
+            0% {
+                content: '';
+            }
+
+            25% {
+                content: '.';
+            }
+
+            50% {
+                content: '..';
+            }
+
+            75% {
+                content: '...';
+            }
+        }
+
+        .subtitle::after {
+            content: '';
+            animation: dots 1.6s step-end infinite;
+        }
+
+        /* Title bar drag region */
+        body {
+            -webkit-app-region: drag;
+        }
+
+        /* Light mode override */
+        body.light {
+            --bg-primary: #f5f5f5;
+            --text-primary: #121212;
+            --track-color: #e5e5e5;
+        }
+    </style>
+</head>
+
+<body>
+    <img class="icon" src="/icon.svg" alt="" />
+    <div class="title">Radiko Desktop</div>
+    <div class="subtitle" id="loading-text">Loading</div>
+    <div class="bar-track">
+        <div class="bar-fill"></div>
+    </div>
+    <script>
+        (function () {
+            try {
+                // Theme detection
+                var uiState = localStorage.getItem('radiko-ui');
+                var theme = 'system';
+                if (uiState) {
+                    try { theme = JSON.parse(uiState).theme || 'system'; } catch (e) { }
+                }
+                var isLight = theme === 'light' || (theme === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (isLight) document.body.classList.add('light');
+
+                // Localization
+                var stored = localStorage.getItem('i18nextLng') || '';
+                var lang = (stored || navigator.language || 'en').substring(0, 2).toLowerCase();
+                fetch('/locales/' + lang + '.json')
+                    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+                    .then(function (data) {
+                        var text = data && data.common && data.common.loading;
+                        if (text) document.getElementById('loading-text').textContent = text.replace(/\.+$/, '');
+                    })
+                    .catch(function () { });
+            } catch (e) { }
+        })();
+    </script>
+</body>
+
+</html>
