@@ -91,7 +91,7 @@ jobs:
             cache-key: 'linux-x64'
 
           - platform: 'ubuntu-22.04'
-            args: '--target aarch64-unknown-linux-gnu'
+            args: '--target aarch64-unknown-linux-gnu --bundles deb,rpm'
             rust-targets: 'aarch64-unknown-linux-gnu'
             cache-key: 'linux-arm64'
 
