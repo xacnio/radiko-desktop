@@ -2145,6 +2145,48 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
+          "description": "Allows the moveWindow and handleIconState APIs\n#### This default permission set includes:\n\n- `allow-move-window`\n- `allow-move-window-constrained`\n- `allow-set-tray-icon-state`",
+          "type": "string",
+          "const": "positioner:default",
+          "markdownDescription": "Allows the moveWindow and handleIconState APIs\n#### This default permission set includes:\n\n- `allow-move-window`\n- `allow-move-window-constrained`\n- `allow-set-tray-icon-state`"
+        },
+        {
+          "description": "Enables the move_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "positioner:allow-move-window",
+          "markdownDescription": "Enables the move_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the move_window_constrained command without any pre-configured scope.",
+          "type": "string",
+          "const": "positioner:allow-move-window-constrained",
+          "markdownDescription": "Enables the move_window_constrained command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_tray_icon_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "positioner:allow-set-tray-icon-state",
+          "markdownDescription": "Enables the set_tray_icon_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the move_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "positioner:deny-move-window",
+          "markdownDescription": "Denies the move_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the move_window_constrained command without any pre-configured scope.",
+          "type": "string",
+          "const": "positioner:deny-move-window-constrained",
+          "markdownDescription": "Denies the move_window_constrained command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_tray_icon_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "positioner:deny-set-tray-icon-state",
+          "markdownDescription": "Denies the set_tray_icon_state command without any pre-configured scope."
+        },
+        {
           "description": "This permission set configures which\nprocess features are by default exposed.\n\n#### Granted Permissions\n\nThis enables to quit via `allow-exit` and restart via `allow-restart`\nthe application.\n\n#### This default permission set includes:\n\n- `allow-exit`\n- `allow-restart`",
           "type": "string",
           "const": "process:default",
