@@ -261,7 +261,8 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
     // Pre-create the tray window
-    let _tray_win = tauri::WebviewWindowBuilder::new(
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "tray",
         tauri::WebviewUrl::App("index.html".into()),
@@ -269,12 +270,22 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     .title("Radiko Mini Player")
     .inner_size(320.0, 120.0)
     .decorations(false)
-    .transparent(true)
     .always_on_top(true)
-    .skip_taskbar(true)
     .resizable(false)
-    .visible(false)
-    .build()?;
+    .visible(false);
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        builder = builder.transparent(true).skip_taskbar(true);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // On macOS, transparent() requires macos-private-api feature or tauri.conf.json configuration.
+        // skip_taskbar(true) is also unsupported on macOS via WebviewWindowBuilder.
+    }
+
+    let _tray_win = builder.build()?;
 
     let tray_win_clone = _tray_win.clone();
 
