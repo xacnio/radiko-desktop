@@ -1,7 +1,7 @@
 //! Settings, misc utility commands: get/save settings, reset, open URL, fetch listeners, get OS.
 
-use tracing::info;
 use tauri::{AppHandle, Manager};
+use tracing::info;
 
 use crate::error::AppError;
 use crate::settings::Settings;
@@ -18,29 +18,69 @@ pub fn get_settings(app: AppHandle) -> Result<Settings, AppError> {
 pub fn save_sort_order(
     sort_by: Option<String>,
     sort_order: Option<String>,
-    app: AppHandle
+    app: AppHandle,
 ) -> Result<(), AppError> {
-    println!("[RUST] save_sort_order called. Mode: {:?}, Order: {:?}", sort_by, sort_order);
+    println!(
+        "[RUST] save_sort_order called. Mode: {:?}, Order: {:?}",
+        sort_by, sort_order
+    );
     let dir = app_data_dir(&app)?;
     let mut settings = Settings::load(&dir);
-    
+
     settings.sort_by = sort_by;
     settings.sort_order = sort_order;
-    
+
     // Antivirus-friendly atomic write: Write to .tmp then rename
-    let json = serde_json::to_string_pretty(&settings).map_err(|e| AppError::Settings(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(&settings).map_err(|e| AppError::Settings(e.to_string()))?;
     let temp_p = dir.join("settings.json.tmp");
     let target_p = dir.join("settings.json");
-    
-    std::fs::write(&temp_p, json).map_err(|e| AppError::Settings(format!("Could not write temporary settings file: {}", e)))?;
-    std::fs::rename(&temp_p, &target_p).map_err(|e| AppError::Settings(format!("Could not update settings (Antivirus block?): {}", e)))?;
-    
+
+    std::fs::write(&temp_p, json).map_err(|e| {
+        AppError::Settings(format!("Could not write temporary settings file: {}", e))
+    })?;
+    std::fs::rename(&temp_p, &target_p).map_err(|e| {
+        AppError::Settings(format!(
+            "Could not update settings (Antivirus block?): {}",
+            e
+        ))
+    })?;
+
     Ok(())
 }
 
 #[tauri::command]
+pub fn save_tray_settings(
+    app: AppHandle,
+    minimize_to_tray: bool,
+    close_to_tray: bool,
+) -> Result<(), AppError> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let mut settings = Settings::load(&dir);
+
+    settings.minimize_to_tray = minimize_to_tray;
+    settings.close_to_tray = close_to_tray;
+
+    // Update runtime state too
+    let state = app.state::<crate::state::AppState>();
+    {
+        let mut inner = state.inner.lock().unwrap();
+        inner.minimize_to_tray = minimize_to_tray;
+        inner.close_to_tray = close_to_tray;
+    }
+
+    settings.save(&dir)
+}
+
+#[tauri::command]
 pub fn save_language(app: AppHandle, lang: String) -> Result<(), AppError> {
-    let dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut settings = Settings::load(&dir);
     settings.language = Some(lang);
     settings.save(&dir)
@@ -48,7 +88,10 @@ pub fn save_language(app: AppHandle, lang: String) -> Result<(), AppError> {
 
 #[tauri::command]
 pub fn save_theme(app: AppHandle, theme: String) -> Result<(), AppError> {
-    let dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut settings = Settings::load(&dir);
     settings.theme = Some(theme);
     settings.save(&dir)
@@ -63,7 +106,7 @@ pub async fn open_browser_url(url: String) -> Result<(), AppError> {
             .spawn()
             .map_err(|e| AppError::Settings(e.to_string()))?;
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -87,14 +130,18 @@ pub async fn open_browser_url(url: String) -> Result<(), AppError> {
 pub async fn reset_setup(app: AppHandle) -> Result<(), AppError> {
     info!("Reset setup requested");
     let dir = app_data_dir(&app)?;
-    
+
     // 1. Delete all radio files (they start with radio_)
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with("radio_") || name.starts_with("custom_") || name == "settings.json" || name == "identified_songs.json" {
+                    if name.starts_with("radio_")
+                        || name.starts_with("custom_")
+                        || name == "settings.json"
+                        || name == "identified_songs.json"
+                    {
                         info!("Deleting: {:?}", name);
                         let _ = std::fs::remove_file(path);
                     }
@@ -115,7 +162,12 @@ pub async fn reset_setup(app: AppHandle) -> Result<(), AppError> {
 #[tauri::command]
 pub async fn fetch_live_listeners(url: String) -> Result<Option<u32>, AppError> {
     let parsed_url = reqwest::Url::parse(&url).map_err(|e| AppError::InvalidUrl(e.to_string()))?;
-    let base_url = format!("{}://{}:{}", parsed_url.scheme(), parsed_url.host_str().unwrap_or(""), parsed_url.port_or_known_default().unwrap_or(80));
+    let base_url = format!(
+        "{}://{}:{}",
+        parsed_url.scheme(),
+        parsed_url.host_str().unwrap_or(""),
+        parsed_url.port_or_known_default().unwrap_or(80)
+    );
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
@@ -125,7 +177,12 @@ pub async fn fetch_live_listeners(url: String) -> Result<Option<u32>, AppError> 
 
     // Try Shoutcast 7.html
     let sc_url = format!("{}/7.html", base_url);
-    if let Ok(resp) = client.get(&sc_url).header("User-Agent", "Mozilla/5.0").send().await {
+    if let Ok(resp) = client
+        .get(&sc_url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+    {
         let resp: reqwest::Response = resp;
         if resp.status().is_success() {
             if let Ok(text) = resp.text().await {
@@ -140,7 +197,7 @@ pub async fn fetch_live_listeners(url: String) -> Result<Option<u32>, AppError> 
                 }
                 let cleaned = cleaned.trim().to_string();
                 let parts: Vec<&str> = cleaned.split(',').collect();
-                
+
                 if !parts.is_empty() {
                     if let Ok(listeners) = parts[0].parse::<u32>() {
                         return Ok(Some(listeners));
@@ -152,7 +209,12 @@ pub async fn fetch_live_listeners(url: String) -> Result<Option<u32>, AppError> 
 
     // Try Icecast status-json.xsl
     let ic_url = format!("{}/status-json.xsl", base_url);
-    if let Ok(resp) = client.get(&ic_url).header("User-Agent", "Mozilla/5.0").send().await {
+    if let Ok(resp) = client
+        .get(&ic_url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+    {
         let resp: reqwest::Response = resp;
         if resp.status().is_success() {
             if let Ok(json) = resp.json::<serde_json::Value>().await {

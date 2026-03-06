@@ -20,10 +20,12 @@ pub struct PlayerState {
     pub stream_metadata: Option<StreamMetadata>,
     pub handle: Option<PlayerHandle>,
     pub preview_handle: Option<PlayerHandle>,
+    pub minimize_to_tray: bool,
+    pub close_to_tray: bool,
 }
 
 impl PlayerState {
-    pub fn new(volume: f32, last_url: Option<String>) -> Self {
+    pub fn new(volume: f32, last_url: Option<String>, minimize_to_tray: bool, close_to_tray: bool) -> Self {
         Self {
             status: PlaybackStatus::Stopped,
             current_url: last_url,
@@ -34,14 +36,16 @@ impl PlayerState {
             stream_metadata: None,
             handle: None,
             preview_handle: None,
+            minimize_to_tray,
+            close_to_tray,
         }
     }
 }
 
 impl AppState {
-    pub fn new(volume: f32, last_url: Option<String>) -> Self {
+    pub fn new(volume: f32, last_url: Option<String>, minimize_to_tray: bool, close_to_tray: bool) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(PlayerState::new(volume, last_url))),
+            inner: Arc::new(Mutex::new(PlayerState::new(volume, last_url, minimize_to_tray, close_to_tray))),
             proxy_port: 0,
             play_lock: tokio::sync::Mutex::new(()),
         }

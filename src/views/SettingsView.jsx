@@ -48,7 +48,11 @@ export default function SettingsView({
     accentColor,
     setAccentColor,
     mixAccent,
-    setMixAccent
+    setMixAccent,
+    minimizeToTray,
+    setMinimizeToTray,
+    closeToTray,
+    setCloseToTray
 }) {
     const { t, i18n } = useTranslation();
     const { notify } = useNotification();
@@ -423,6 +427,34 @@ export default function SettingsView({
                                             ${mixAccent ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
                                     >
                                         <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${mixAccent ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-4 py-1 border-t border-border/30 pt-4">
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-bold text-text-primary">{t('settings.minimizeToTray')}</h4>
+                                        <p className="text-xs text-text-muted">{t('settings.minimizeToTrayDesc')}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setMinimizeToTray(!minimizeToTray)}
+                                        className={`w-10 h-5 rounded-full transition-all relative p-1 cursor-pointer outline-none shrink-0
+                                            ${minimizeToTray ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
+                                    >
+                                        <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${minimizeToTray ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-4 py-1 border-t border-border/30 pt-4">
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-bold text-text-primary">{t('settings.closeToTray')}</h4>
+                                        <p className="text-xs text-text-muted">{t('settings.closeToTrayDesc')}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setCloseToTray(!closeToTray)}
+                                        className={`w-10 h-5 rounded-full transition-all relative p-1 cursor-pointer outline-none shrink-0
+                                            ${closeToTray ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
+                                    >
+                                        <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${closeToTray ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </button>
                                 </div>
                             </div>

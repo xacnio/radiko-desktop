@@ -20,9 +20,15 @@ import { useTranslation } from 'react-i18next';
 import { availableLanguages } from './i18n';
 import { check } from '@tauri-apps/plugin-updater';
 
+import TrayPlayer from './components/player/TrayPlayer';
+
 const win = getCurrentWindow();
 
 export default function App() {
+    if (win.label === 'tray') {
+        return <TrayPlayer />;
+    }
+
     // Show the main window as soon as React is mounted
     useEffect(() => {
         win.show().catch(() => { });
@@ -106,6 +112,21 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
     const { notify, setHasActiveStation } = useNotification();
     const { t, i18n } = useTranslation();
     const [showLanguageSetup, setShowLanguageSetup] = useState(() => !localStorage.getItem('language_setup_done'));
+
+    const [minimizeToTray, setMinimizeToTray] = useState(() => localStorage.getItem('minimize_to_tray') !== 'false');
+    const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem('close_to_tray') !== 'false');
+
+    useEffect(() => {
+        localStorage.setItem('minimize_to_tray', minimizeToTray);
+    }, [minimizeToTray]);
+
+    useEffect(() => {
+        localStorage.setItem('close_to_tray', closeToTray);
+    }, [closeToTray]);
+
+    useEffect(() => {
+        invoke('save_tray_settings', { minimizeToTray, closeToTray }).catch(console.error);
+    }, [minimizeToTray, closeToTray]);
 
     // --- Auto update logic moved below state hooks
 
@@ -1126,7 +1147,15 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
 
     // --- events ---
     useEffect(() => {
+        invoke('get_status').then(res => {
+            if (res) {
+                setStatus(res.status);
+                setVolume(res.volume * 100);
+            }
+        }).catch(() => { });
+
         const unlistenPromises = [
+            listen('volume-changed', e => setVolume(e.payload * 100)),
             listen('playback-status', e => setStatus(e.payload)),
             listen('stream-metadata', e => {
                 if (e.payload) {
@@ -1336,6 +1365,10 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                             setAccentColor={setAccentColor}
                             mixAccent={mixAccent}
                             setMixAccent={setMixAccent}
+                            minimizeToTray={minimizeToTray}
+                            setMinimizeToTray={setMinimizeToTray}
+                            closeToTray={closeToTray}
+                            setCloseToTray={setCloseToTray}
                         />
                     ) : (
                         <StationList

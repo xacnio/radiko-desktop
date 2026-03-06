@@ -200,7 +200,11 @@
         "downloadingUpdate": "Downloading update... {{percent}}%",
         "installUpdate": "Install and Restart Now",
         "updateFound": "New version found: {{version}}",
-        "downloadUpdate": "Download Update"
+        "downloadUpdate": "Download Update",
+        "minimizeToTray": "Minimize to tray",
+        "minimizeToTrayDesc": "Hide the window to tray instead of minimizing it to taskbar",
+        "closeToTray": "Close to tray",
+        "closeToTrayDesc": "Hide the window to tray instead of closing the application"
     },
     "ctx": {
         "play": "Play",

@@ -17,6 +17,14 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(default)]
     pub theme: Option<String>,
+    #[serde(default = "default_true")]
+    pub minimize_to_tray: bool,
+    #[serde(default = "default_true")]
+    pub close_to_tray: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -28,6 +36,8 @@ impl Default for Settings {
             sort_order: Some("asc".to_string()),
             language: None,
             theme: None,
+            minimize_to_tray: true,
+            close_to_tray: true,
         }
     }
 }
@@ -44,13 +54,11 @@ impl Settings {
 
     /// Persist settings to disk. Creates the directory if needed.
     pub fn save(&self, app_data_dir: &Path) -> Result<(), AppError> {
-        fs::create_dir_all(app_data_dir)
-            .map_err(|e| AppError::Settings(e.to_string()))?;
+        fs::create_dir_all(app_data_dir).map_err(|e| AppError::Settings(e.to_string()))?;
         let path = app_data_dir.join("settings.json");
-        let content = serde_json::to_string_pretty(self)
-            .map_err(|e| AppError::Settings(e.to_string()))?;
-        fs::write(&path, content)
-            .map_err(|e| AppError::Settings(e.to_string()))?;
+        let content =
+            serde_json::to_string_pretty(self).map_err(|e| AppError::Settings(e.to_string()))?;
+        fs::write(&path, content).map_err(|e| AppError::Settings(e.to_string()))?;
         Ok(())
     }
 }

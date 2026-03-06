@@ -200,7 +200,11 @@
         "downloadingUpdate": "Update wird heruntergeladen... {{percent}}%",
         "installUpdate": "Jetzt installieren und neu starten",
         "updateFound": "Neue Version gefunden: {{version}}",
-        "downloadUpdate": "Update herunterladen"
+        "downloadUpdate": "Update herunterladen",
+        "minimizeToTray": "In den Infobereich minimieren",
+        "minimizeToTrayDesc": "Das Fenster beim Minimieren in den Infobereich statt in die Taskleiste ausblenden",
+        "closeToTray": "Beim Schließen in den Infobereich minimieren",
+        "closeToTrayDesc": "Das Fenster beim Schließen in den Infobereich ausblenden, statt die Anwendung zu beenden"
     },
     "ctx": {
         "play": "Abspielen",

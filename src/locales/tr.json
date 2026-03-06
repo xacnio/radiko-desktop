@@ -200,7 +200,11 @@
         "downloadingUpdate": "Güncelleme indiriliyor... {{percent}}%",
         "installUpdate": "Şimdi Yükle ve Yeniden Başlat",
         "updateFound": "Yeni bir sürüm bulundu: {{version}}",
-        "downloadUpdate": "Güncellemeyi İndir"
+        "downloadUpdate": "Güncellemeyi İndir",
+        "minimizeToTray": "Simge durumuna küçültüldüğünde tepsiye gizle",
+        "minimizeToTrayDesc": "Pencere küçültüldüğünde görev çubuğu yerine sistem tepsisine gizlenir",
+        "closeToTray": "Kapatıldığında tepsiye gizle",
+        "closeToTrayDesc": "Pencere kapatıldığında uygulama tamamen kapanmak yerine sistem tepsisine gizlenir"
     },
     "ctx": {
         "play": "Çal",
