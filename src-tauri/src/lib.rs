@@ -22,13 +22,19 @@ pub fn run() {
 
     tracing::info!("Radiko starting");
 
-    // 1. PENDING RESET CHECK 
+    // 1. PENDING RESET CHECK
     setup::check_pending_reset();
 
     // 2. NATIVE SPLASH SCREEN (WINDOWS)
     let splash_handle = platform::splash::SplashScreen::show();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.show();
+                let _ = main.set_focus();
+            }
+        }))
         .setup(move |app| {
             let data_dir = app
                 .path()
@@ -46,7 +52,7 @@ pub fn run() {
             let proxy_state = proxy::start_proxy(app.handle().clone());
             let port = proxy_state.port;
 
-            let mut state = AppState::new(settings.volume, settings.last_url);
+            let mut state = AppState::new(settings.volume, settings.last_url, settings.minimize_to_tray, settings.close_to_tray);
             state.proxy_port = port;
             app.manage(state);
 
@@ -62,6 +68,11 @@ pub fn run() {
 
             // 7. AWAIT FRONTEND & CLOSE SPLASH
             setup::await_frontend_and_close_splash(app.handle().clone(), splash_handle);
+
+            // 8. TRAY ICON
+            if let Err(e) = setup::setup_tray(app) {
+                tracing::error!("Failed to initialize tray: {}", e);
+            }
 
             Ok(())
         })
@@ -133,10 +144,12 @@ pub fn run() {
             commands::save_sort_order,
             commands::save_language,
             commands::save_theme,
+            commands::save_tray_settings,
             commands::export_backup,
             commands::import_backup,
             commands::analyze_backup,
         ])
+        .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .run(tauri::generate_context!())
