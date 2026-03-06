@@ -1,6 +1,6 @@
 [package]
 name = "radiko-desktop"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 description = "Desktop radio streaming application"
 license = "GPL-3.0-only"
