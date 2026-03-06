@@ -16,7 +16,18 @@ pub async fn search_stations(
     hide_broken: Option<bool>,
     only_verified: Option<bool>,
 ) -> Result<Vec<stations::Station>, AppError> {
-    stations::search(name, country, state, language, tag, limit, offset, hide_broken, only_verified).await
+    stations::search(
+        name,
+        country,
+        state,
+        language,
+        tag,
+        limit,
+        offset,
+        hide_broken,
+        only_verified,
+    )
+    .await
 }
 
 #[tauri::command]

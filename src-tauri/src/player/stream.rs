@@ -70,7 +70,8 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
 
     if has_stream_inf {
         // Master playlist: pick the first variant stream URL
-        let variant_url = lines.iter()
+        let variant_url = lines
+            .iter()
             .find(|l| !l.starts_with('#') && !l.is_empty())
             .ok_or("No variant streams found in HLS master playlist")?;
 
@@ -80,7 +81,10 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
             format!("{}{}", base_url, variant_url)
         };
 
-        info!("HLS master playlist detected, using variant: {}", stream_url);
+        info!(
+            "HLS master playlist detected, using variant: {}",
+            stream_url
+        );
 
         // Update base URL for the variant
         base_url = stream_url.clone();
@@ -118,7 +122,10 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
 
         for line in &lines {
             if line.starts_with("#EXT-X-TARGETDURATION:") {
-                if let Ok(d) = line.trim_start_matches("#EXT-X-TARGETDURATION:").parse::<f64>() {
+                if let Ok(d) = line
+                    .trim_start_matches("#EXT-X-TARGETDURATION:")
+                    .parse::<f64>()
+                {
                     target_duration = d;
                 }
             } else if line.starts_with("#EXTINF:") {
@@ -174,7 +181,8 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
                 }
             }
 
-            match client.get(&seg_url)
+            match client
+                .get(&seg_url)
                 .header("User-Agent", "Radiko/1.0")
                 .send()
                 .await
@@ -189,9 +197,10 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
                                 }
                                 let audio = extract_audio_from_segment(&seg_data);
                                 if !audio.is_empty()
-                                    && config.audio_tx.send(Bytes::from(audio)).is_err() {
-                                        return Ok(());
-                                    }
+                                    && config.audio_tx.send(Bytes::from(audio)).is_err()
+                                {
+                                    return Ok(());
+                                }
                             }
                             Err(e) => {
                                 debug!("HLS segment read error: {}", e);
@@ -327,7 +336,11 @@ fn extract_audio_from_ts(data: &[u8]) -> Vec<u8> {
         debug!("TS: extracted 0 audio bytes, passing raw segment");
         data.to_vec()
     } else {
-        debug!("TS: extracted {} audio bytes from {} TS packets", audio_data.len(), packets.len());
+        debug!(
+            "TS: extracted {} audio bytes from {} TS packets",
+            audio_data.len(),
+            packets.len()
+        );
         audio_data
     }
 }
@@ -513,10 +526,14 @@ async fn run_icy_stream(config: &StreamConfig) -> Result<(), String> {
     let get_header = |key: &str| -> Option<String> {
         // Many older SHOUTcast/Icecast servers send latin-1 headers, which might fail standard to_str()
         // We do a robust read here:
-        response.headers().get(key).map(|v| {
-            let bytes = v.as_bytes();
-            decode_icy_text(bytes).trim().to_string()
-        }).filter(|s| !s.is_empty())
+        response
+            .headers()
+            .get(key)
+            .map(|v| {
+                let bytes = v.as_bytes();
+                decode_icy_text(bytes).trim().to_string()
+            })
+            .filter(|s| !s.is_empty())
     };
 
     let icy_name = get_header("icy-name");
@@ -709,8 +726,8 @@ fn decode_icy_text(bytes: &[u8]) -> String {
     // Try standard UTF-8 first
     if let Ok(s) = std::str::from_utf8(bytes) {
         // Detect globally "Double-Encoded UTF-8" algorithmically:
-        // By checking if ALL chars map to ISO-8859-1 (u32 <= 255), we know it 
-        // was misread by an older native ISO stream server. If repacking them 
+        // By checking if ALL chars map to ISO-8859-1 (u32 <= 255), we know it
+        // was misread by an older native ISO stream server. If repacking them
         // creates VALID multi-byte UTF-8, it's irrefutably double-encoded!
         let is_all_latin1 = s.chars().all(|c| (c as u32) <= 255);
         if is_all_latin1 {
@@ -724,15 +741,15 @@ fn decode_icy_text(bytes: &[u8]) -> String {
         }
         return s.to_string();
     }
-    
+
     // String is totally invalid UTF-8. Use Mozilla's chardetng library to intelligently
     // analyze the byte-frequencies and guess the native charset (Turkish, Russian, etc.)
     let mut detector = chardetng::EncodingDetector::new();
     detector.feed(bytes, true); // true = this is the last chunk
-    
+
     // Pass None for TLD, and true for allowing non-utf8 (it's already proven not utf8)
     let encoding = detector.guess(None, true);
     let (decoded, _, _) = encoding.decode(bytes);
-    
+
     decoded.into_owned()
 }

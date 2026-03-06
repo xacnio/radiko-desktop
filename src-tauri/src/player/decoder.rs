@@ -30,8 +30,7 @@ use crate::player::types::PlaybackStatus;
 
 /// AAC sample rate table (ISO 14496-3)
 const SAMPLE_RATES: [u32; 13] = [
-    96000, 88200, 64000, 48000, 44100, 32000,
-    24000, 22050, 16000, 12000, 11025, 8000, 7350,
+    96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350,
 ];
 
 pub fn run_decode_loop(
@@ -47,14 +46,18 @@ pub fn run_decode_loop(
     let mut peek = vec![0u8; 16384];
     let mut n = 0;
     while n < 16384 {
-        if shutdown.load(Ordering::Relaxed) { break; }
+        if shutdown.load(Ordering::Relaxed) {
+            break;
+        }
         match reader.read(&mut peek[n..]) {
             Ok(0) => break, // EOF
             Ok(count) => n += count,
             Err(_) => break, // Error
         }
         // 8KB is plenty of data to find at least 3 consecutive ADTS frames (typically ~300 bytes each)
-        if n >= 8192 { break; }
+        if n >= 8192 {
+            break;
+        }
     }
 
     if n < 2 {
@@ -83,7 +86,14 @@ pub fn run_decode_loop(
     } else {
         info!("Routing stream via symphonia probe");
         let prefixed = PrefixedReader::new(peek, reader);
-        run_probe_decode(prefixed, Hint::new(), sink, shutdown, app_handle, emit_events);
+        run_probe_decode(
+            prefixed,
+            Hint::new(),
+            sink,
+            shutdown,
+            app_handle,
+            emit_events,
+        );
     }
 
     info!("Decode thread exiting");
@@ -116,20 +126,20 @@ fn find_adts_sync(buf: &[u8]) -> Option<usize> {
         }
 
         let next = i + frame_len;
-        if next + 6 < buf.len()
-            && buf[next] == 0xFF && (buf[next + 1] & 0xF6) == 0xF0 {
-                
-                // Read frame 2 length to find frame 3
-                let frame_len_2 = ((buf[next + 3] as usize & 0x03) << 11)
-                    | ((buf[next + 4] as usize) << 3)
-                    | ((buf[next + 5] as usize) >> 5);
-                
-                let next_next = next + frame_len_2;
-                if next_next + 1 < buf.len()
-                    && buf[next_next] == 0xFF && (buf[next_next + 1] & 0xF6) == 0xF0 {
-                        return Some(i); // 3-frame chain confirmed
-                    }
+        if next + 6 < buf.len() && buf[next] == 0xFF && (buf[next + 1] & 0xF6) == 0xF0 {
+            // Read frame 2 length to find frame 3
+            let frame_len_2 = ((buf[next + 3] as usize & 0x03) << 11)
+                | ((buf[next + 4] as usize) << 3)
+                | ((buf[next + 5] as usize) >> 5);
+
+            let next_next = next + frame_len_2;
+            if next_next + 1 < buf.len()
+                && buf[next_next] == 0xFF
+                && (buf[next_next + 1] & 0xF6) == 0xF0
+            {
+                return Some(i); // 3-frame chain confirmed
             }
+        }
     }
     None
 }
@@ -163,12 +173,15 @@ struct AudioLevelMeter {
 
 impl AudioLevelMeter {
     fn new() -> Self {
-        Self { buffer: Vec::with_capacity(LEVEL_SAMPLES), smoothed: 0.0 }
+        Self {
+            buffer: Vec::with_capacity(LEVEL_SAMPLES),
+            smoothed: 0.0,
+        }
     }
 
     fn feed(&mut self, samples: &[f32], channels: u16) {
         let ch = channels.max(1) as usize;
-        
+
         // Handle audio identification capture
         if CAPTURE_ACTIVE.load(Ordering::Relaxed) {
             if let Ok(mut buffer) = CAPTURED_SAMPLES.lock() {
@@ -177,7 +190,9 @@ impl AudioLevelMeter {
                     for frame in samples.chunks(ch) {
                         let mono: f32 = frame.iter().sum::<f32>() / ch as f32;
                         buffer.push(mono);
-                        if buffer.len() >= MAX_CAPTURE_SAMPLES { break; }
+                        if buffer.len() >= MAX_CAPTURE_SAMPLES {
+                            break;
+                        }
                     }
                 }
             }
@@ -194,7 +209,11 @@ impl AudioLevelMeter {
             let rms = (sum_sq / self.buffer.len() as f32).sqrt();
 
             // Log scale: map to 0.0..1.0
-            let db = if rms > 1e-6 { (20.0 * rms.log10()).max(-48.0) } else { -48.0 };
+            let db = if rms > 1e-6 {
+                (20.0 * rms.log10()).max(-48.0)
+            } else {
+                -48.0
+            };
             let level = ((db + 48.0) / 48.0).clamp(0.0, 1.0);
 
             // Smooth
@@ -233,23 +252,29 @@ fn run_adts_decode(
     let mut packet_ts: u64 = 0;
     let mut meter = AudioLevelMeter::new();
     let mut equalizer: Option<Equalizer> = None;
-    
+
     if emit_events {
         events::emit_status(&app_handle, PlaybackStatus::Playing);
     }
 
     loop {
-        if shutdown.load(Ordering::Relaxed) { break; }
+        if shutdown.load(Ordering::Relaxed) {
+            break;
+        }
 
         // Find ADTS sync word
         let mut sync = [0u8; 2];
-        if reader.read_exact(&mut sync).is_err() { break; }
+        if reader.read_exact(&mut sync).is_err() {
+            break;
+        }
 
         // Resync if needed
         let mut resync_count = 0usize;
         while !(sync[0] == 0xFF && (sync[1] & 0xF6) == 0xF0) {
             sync[0] = sync[1];
-            if reader.read_exact(&mut sync[1..2]).is_err() { return; }
+            if reader.read_exact(&mut sync[1..2]).is_err() {
+                return;
+            }
             resync_count += 1;
             if resync_count > 65536 {
                 warn!("ADTS: no sync after 64KB, giving up");
@@ -262,9 +287,19 @@ fn run_adts_decode(
 
         // Read remaining 5 bytes of the 7-byte ADTS fixed header
         let mut hdr_rest = [0u8; 5];
-        if reader.read_exact(&mut hdr_rest).is_err() { break; }
+        if reader.read_exact(&mut hdr_rest).is_err() {
+            break;
+        }
 
-        let header = [sync[0], sync[1], hdr_rest[0], hdr_rest[1], hdr_rest[2], hdr_rest[3], hdr_rest[4]];
+        let header = [
+            sync[0],
+            sync[1],
+            hdr_rest[0],
+            hdr_rest[1],
+            hdr_rest[2],
+            hdr_rest[3],
+            hdr_rest[4],
+        ];
 
         let protection_absent = (header[1] & 0x01) != 0;
         let profile = ((header[2] >> 6) & 0x03) + 1; // MPEG-4 Audio Object Type
@@ -283,13 +318,17 @@ fn run_adts_decode(
         // Skip CRC bytes if present
         if !protection_absent {
             let mut crc = [0u8; 2];
-            if reader.read_exact(&mut crc).is_err() { break; }
+            if reader.read_exact(&mut crc).is_err() {
+                break;
+            }
         }
 
         // Read AAC frame payload
         let payload_size = frame_length - header_size;
         let mut payload = vec![0u8; payload_size];
-        if reader.read_exact(&mut payload).is_err() { break; }
+        if reader.read_exact(&mut payload).is_err() {
+            break;
+        }
 
         // Create AAC decoder on first valid frame
         if decoder.is_none() {
@@ -299,7 +338,13 @@ fn run_adts_decode(
                 44100
             };
             let channels: u16 = match channel_config {
-                1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 8,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 8,
                 _ => 2,
             };
 
@@ -308,10 +353,7 @@ fn run_adts_decode(
             let aot = profile;
             let sri = sample_rate_idx as u8;
             let cc = channel_config;
-            let asc: [u8; 2] = [
-                (aot << 3) | (sri >> 1),
-                ((sri & 1) << 7) | (cc << 3),
-            ];
+            let asc: [u8; 2] = [(aot << 3) | (sri >> 1), ((sri & 1) << 7) | (cc << 3)];
 
             let mut codec_params = CodecParameters::new();
             codec_params
@@ -321,7 +363,10 @@ fn run_adts_decode(
 
             match symphonia::default::get_codecs().make(&codec_params, &DecoderOptions::default()) {
                 Ok(d) => {
-                    info!("ADTS decode: AAC-LC profile={} {}ch {}Hz", profile, channels, sample_rate);
+                    info!(
+                        "ADTS decode: AAC-LC profile={} {}ch {}Hz",
+                        profile, channels, sample_rate
+                    );
                     RECOGNITION_SAMPLE_RATE.store(sample_rate, Ordering::Relaxed);
                     decoder = Some(d);
                 }
@@ -355,13 +400,13 @@ fn run_adts_decode(
                     // Limit to 1 frame in sink to ensure near-zero latency.
                     while sink.len() > 1 {
                         std::thread::sleep(std::time::Duration::from_millis(1));
-                        if shutdown.load(Ordering::Relaxed) { break; }
+                        if shutdown.load(Ordering::Relaxed) {
+                            break;
+                        }
                     }
 
                     // 2. ONLY THEN apply equalizer (to use the most current gains).
-                    let eq = equalizer.get_or_insert_with(|| {
-                        Equalizer::new(rate, ch)
-                    });
+                    let eq = equalizer.get_or_insert_with(|| Equalizer::new(rate, ch));
                     eq.process(&mut samples);
 
                     meter.feed(&samples, ch);
@@ -422,11 +467,18 @@ fn run_probe_decode(
         }
     };
 
-    let channels = track.codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
+    let channels = track
+        .codec_params
+        .channels
+        .map(|c| c.count() as u16)
+        .unwrap_or(2);
     let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
     let track_id = track.id;
 
-    info!("Probe decode: {}ch {}Hz track={}", channels, sample_rate, track_id);
+    info!(
+        "Probe decode: {}ch {}Hz track={}",
+        channels, sample_rate, track_id
+    );
     RECOGNITION_SAMPLE_RATE.store(sample_rate, Ordering::Relaxed);
 
     let mut decoder = match symphonia::default::get_codecs()
@@ -449,16 +501,26 @@ fn run_probe_decode(
     let mut equalizer = Equalizer::new(sample_rate, channels);
 
     loop {
-        if shutdown.load(Ordering::Relaxed) { break; }
+        if shutdown.load(Ordering::Relaxed) {
+            break;
+        }
 
         let packet = match format.next_packet() {
             Ok(p) => p,
             Err(symphonia::core::errors::Error::IoError(ref e))
-                if e.kind() == io::ErrorKind::UnexpectedEof => { break; }
-            Err(e) => { warn!("Packet error: {}", e); continue; }
+                if e.kind() == io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(e) => {
+                warn!("Packet error: {}", e);
+                continue;
+            }
         };
 
-        if packet.track_id() != track_id { continue; }
+        if packet.track_id() != track_id {
+            continue;
+        }
 
         match decoder.decode(&packet) {
             Ok(decoded) => {
@@ -471,7 +533,9 @@ fn run_probe_decode(
                     // Wait for player capacity first.
                     while sink.len() > 1 {
                         std::thread::sleep(std::time::Duration::from_millis(1));
-                        if shutdown.load(Ordering::Relaxed) { break; }
+                        if shutdown.load(Ordering::Relaxed) {
+                            break;
+                        }
                     }
 
                     // Apply EQ just before sending to speaker.
@@ -484,7 +548,10 @@ fn run_probe_decode(
             Err(symphonia::core::errors::Error::DecodeError(msg)) => {
                 debug!("Decode skip: {}", msg);
             }
-            Err(e) => { warn!("Fatal decode error: {}", e); break; }
+            Err(e) => {
+                warn!("Fatal decode error: {}", e);
+                break;
+            }
         }
     }
 
@@ -505,7 +572,12 @@ struct ChannelReader {
 
 impl ChannelReader {
     fn new(rx: Receiver<Bytes>, shutdown: Arc<AtomicBool>) -> Self {
-        Self { rx: Mutex::new(rx), buffer: Vec::new(), pos: 0, shutdown }
+        Self {
+            rx: Mutex::new(rx),
+            buffer: Vec::new(),
+            pos: 0,
+            shutdown,
+        }
     }
 }
 
@@ -517,7 +589,9 @@ impl Read for ChannelReader {
             self.pos += n;
             return Ok(n);
         }
-        if self.shutdown.load(Ordering::Relaxed) { return Ok(0); }
+        if self.shutdown.load(Ordering::Relaxed) {
+            return Ok(0);
+        }
         let rx = self.rx.lock().unwrap();
         match rx.recv() {
             Ok(bytes) => {
@@ -541,8 +615,12 @@ impl Seek for ChannelReader {
 }
 
 impl MediaSource for ChannelReader {
-    fn is_seekable(&self) -> bool { false }
-    fn byte_len(&self) -> Option<u64> { None }
+    fn is_seekable(&self) -> bool {
+        false
+    }
+    fn byte_len(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// Prepends buffered bytes before delegating to inner reader.
@@ -555,7 +633,11 @@ struct PrefixedReader {
 
 impl PrefixedReader {
     fn new(prefix: Vec<u8>, inner: ChannelReader) -> Self {
-        Self { prefix, prefix_pos: 0, inner }
+        Self {
+            prefix,
+            prefix_pos: 0,
+            inner,
+        }
     }
 }
 
@@ -579,6 +661,10 @@ impl Seek for PrefixedReader {
 }
 
 impl MediaSource for PrefixedReader {
-    fn is_seekable(&self) -> bool { false }
-    fn byte_len(&self) -> Option<u64> { None }
+    fn is_seekable(&self) -> bool {
+        false
+    }
+    fn byte_len(&self) -> Option<u64> {
+        None
+    }
 }

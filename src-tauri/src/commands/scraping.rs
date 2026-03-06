@@ -20,13 +20,16 @@ pub async fn probe_station(url: String) -> Result<ProbeResult, AppError> {
 
     // HLS stream: parse manifest for bitrate/codec info
     if url.contains(".m3u8") {
-        let resp = client.get(&url)
+        let resp = client
+            .get(&url)
             .header("User-Agent", "Radiko/1.0")
             .send()
             .await
             .map_err(|e| AppError::Settings(e.to_string()))?;
 
-        let manifest = resp.text().await
+        let manifest = resp
+            .text()
+            .await
             .map_err(|e| AppError::Settings(e.to_string()))?;
 
         let mut bitrate: u32 = 0;
@@ -63,7 +66,9 @@ pub async fn probe_station(url: String) -> Result<ProbeResult, AppError> {
         if bitrate == 0 {
             let base_url = {
                 let mut u = url.clone();
-                if let Some(pos) = u.rfind('/') { u.truncate(pos + 1); }
+                if let Some(pos) = u.rfind('/') {
+                    u.truncate(pos + 1);
+                }
                 u
             };
             let mut seg_duration: f64 = 0.0;
@@ -71,8 +76,11 @@ pub async fn probe_station(url: String) -> Result<ProbeResult, AppError> {
 
             for line in manifest.lines() {
                 if line.starts_with("#EXTINF:") {
-                    let dur_str: String = line.trim_start_matches("#EXTINF:")
-                        .chars().take_while(|c| *c != ',').collect();
+                    let dur_str: String = line
+                        .trim_start_matches("#EXTINF:")
+                        .chars()
+                        .take_while(|c| *c != ',')
+                        .collect();
                     seg_duration = dur_str.parse().unwrap_or(0.0);
                 } else if !line.starts_with('#') && !line.is_empty() && seg_duration > 0.0 {
                     seg_url = Some(if line.starts_with("http") {
@@ -86,7 +94,12 @@ pub async fn probe_station(url: String) -> Result<ProbeResult, AppError> {
 
             if let (Some(seg), dur) = (seg_url, seg_duration) {
                 if dur > 0.0 {
-                    if let Ok(resp) = client.get(&seg).header("User-Agent", "Radiko/1.0").send().await {
+                    if let Ok(resp) = client
+                        .get(&seg)
+                        .header("User-Agent", "Radiko/1.0")
+                        .send()
+                        .await
+                    {
                         if let Ok(bytes) = resp.bytes().await {
                             bitrate = ((bytes.len() as f64 * 8.0) / dur / 1000.0) as u32;
                         }
@@ -103,18 +116,23 @@ pub async fn probe_station(url: String) -> Result<ProbeResult, AppError> {
     }
 
     // Standard ICY stream probe
-    let req = client.get(&url)
+    let req = client
+        .get(&url)
         .header("Icy-MetaData", "1")
         .send()
         .await
         .map_err(|e| AppError::Settings(e.to_string()))?;
 
-    let content_type = req.headers().get(reqwest::header::CONTENT_TYPE)
+    let content_type = req
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
 
-    let icy_br = req.headers().get("icy-br")
+    let icy_br = req
+        .headers()
+        .get("icy-br")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
@@ -149,13 +167,23 @@ pub struct ScrapeResult {
 }
 
 #[tauri::command]
-pub async fn scrape_radio_url(state: tauri::State<'_, AppState>, url: String) -> Result<ScrapeResult, AppError> {
+pub async fn scrape_radio_url(
+    state: tauri::State<'_, AppState>,
+    url: String,
+) -> Result<ScrapeResult, AppError> {
     scrape_radio_url_internal(state.proxy_port, url).await
 }
 
-pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<ScrapeResult, AppError> {
+pub async fn scrape_radio_url_internal(
+    proxy_port: u16,
+    url: String,
+) -> Result<ScrapeResult, AppError> {
     info!("Scraping radio URL via proxy: {}", url);
-    let proxy_url = format!("http://127.0.0.1:{}/proxy?url={}", proxy_port, urlencoding::encode(&url));
+    let proxy_url = format!(
+        "http://127.0.0.1:{}/proxy?url={}",
+        proxy_port,
+        urlencoding::encode(&url)
+    );
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -176,21 +204,30 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
         }
     };
 
-    let resp = client.get(&proxy_url)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+    let resp = client
+        .get(&proxy_url)
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.9,tr;q=0.8")
         .send()
         .await
         .map_err(|e| AppError::Settings(format!("Page could not be loaded: {}", e)))?;
 
     // Check if the URL itself is a direct stream
-    let content_type = resp.headers().get(reqwest::header::CONTENT_TYPE)
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_lowercase();
 
-    if content_type.contains("audio/") || content_type.contains("application/ogg")
-        || content_type.contains("mpegurl") || content_type.contains("x-scpls") {
+    if content_type.contains("audio/")
+        || content_type.contains("application/ogg")
+        || content_type.contains("mpegurl")
+        || content_type.contains("x-scpls")
+    {
         return Ok(ScrapeResult {
             name: String::new(),
             stream_urls: vec![url.clone()],
@@ -199,7 +236,9 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
         });
     }
 
-    let html = resp.text().await
+    let html = resp
+        .text()
+        .await
         .map_err(|e| AppError::Settings(format!("Page could not be read: {}", e)))?;
 
     let html_lower = html.to_lowercase();
@@ -221,7 +260,9 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
     };
 
     // --- Extract stream URLs ---
-    let audio_exts = [".mp3", ".m3u8", ".ogg", ".opus", ".pls", ".m3u", ".flac", ".wav", ".m4a"];
+    let audio_exts = [
+        ".mp3", ".m3u8", ".ogg", ".opus", ".pls", ".m3u", ".flac", ".wav", ".m4a",
+    ];
     let mut candidate_urls: Vec<String> = Vec::new();
 
     // 1. Collect potential candidates (src attributes)
@@ -238,7 +279,9 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
                 }
             }
             idx = abs + 1;
-            if candidate_urls.len() > 30 { break; }
+            if candidate_urls.len() > 30 {
+                break;
+            }
         }
     }
 
@@ -254,12 +297,14 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
                 let url_start = start_guess + quote_idx + 1;
                 candidate_urls.push(html[url_start..end_abs].to_string());
             } else if let Some(href_idx) = segment.rfind("href=") {
-                 let url_start = start_guess + href_idx + 5;
-                 candidate_urls.push(html[url_start..end_abs].to_string());
+                let url_start = start_guess + href_idx + 5;
+                candidate_urls.push(html[url_start..end_abs].to_string());
             }
 
             idx = end_abs;
-            if idx >= html_lower.len() { break; }
+            if idx >= html_lower.len() {
+                break;
+            }
         }
     }
 
@@ -273,33 +318,45 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
     let mut probe_tasks = Vec::new();
     for c_url in &candidate_urls {
         let l = c_url.to_lowercase();
-        if l.ends_with(".js") || l.ends_with(".css") || l.ends_with(".png") || l.ends_with(".jpg") || l.contains("google") {
+        if l.ends_with(".js")
+            || l.ends_with(".css")
+            || l.ends_with(".png")
+            || l.ends_with(".jpg")
+            || l.contains("google")
+        {
             continue;
         }
-        
+
         let client = probe_client.clone();
         let c_url = c_url.clone();
         probe_tasks.push(tauri::async_runtime::spawn(async move {
             if let Ok(res) = client.head(&c_url).send().await {
                 let h = res.headers();
-                let ct = h.get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("").to_lowercase();
-                
-                let is_audio_ct = ct.starts_with("audio/") || 
-                                  ct.contains("mpegurl") || 
-                                  ct.contains("x-scpls") || 
-                                  ct.contains("application/ogg") ||
-                                  ct.contains("audio/mpeg") ||
-                                  ct.contains("audio/aac");
-                
-                let has_icy = h.contains_key("icy-name") || h.contains_key("icy-metaint") || h.contains_key("icy-br") || h.contains_key("x-audiocast-name");
-                
-                let is_garbage = ct.starts_with("image/") || 
-                                 ct.starts_with("video/") ||
-                                 ct.starts_with("font/") ||
-                                 ct.contains("javascript") || 
-                                 ct.contains("json") ||
-                                 ct.contains("xml") ||
-                                 ct.contains("pdf");
+                let ct = h
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_lowercase();
+
+                let is_audio_ct = ct.starts_with("audio/")
+                    || ct.contains("mpegurl")
+                    || ct.contains("x-scpls")
+                    || ct.contains("application/ogg")
+                    || ct.contains("audio/mpeg")
+                    || ct.contains("audio/aac");
+
+                let has_icy = h.contains_key("icy-name")
+                    || h.contains_key("icy-metaint")
+                    || h.contains_key("icy-br")
+                    || h.contains_key("x-audiocast-name");
+
+                let is_garbage = ct.starts_with("image/")
+                    || ct.starts_with("video/")
+                    || ct.starts_with("font/")
+                    || ct.contains("javascript")
+                    || ct.contains("json")
+                    || ct.contains("xml")
+                    || ct.contains("pdf");
 
                 if (is_audio_ct || has_icy) && !is_garbage {
                     return Some(c_url);
@@ -307,7 +364,9 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
             }
             None
         }));
-        if probe_tasks.len() > 15 { break; }
+        if probe_tasks.len() > 15 {
+            break;
+        }
     }
 
     // Collect verified streams
@@ -324,23 +383,33 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
         for tag in ["<iframe", "<frame", "<embed"] {
             let mut idx = 0;
             while let Some(pos) = html_lower[idx..].find(tag) {
-                let segment = &html_lower[idx+pos..];
+                let segment = &html_lower[idx + pos..];
                 if let Some(src_pos) = segment.find("src=\"").or_else(|| segment.find("src='")) {
                     let start = idx + pos + src_pos + 5;
-                    let quote = if segment[src_pos+4..].starts_with('"') { '"' } else { '\'' };
+                    let quote = if segment[src_pos + 4..].starts_with('"') {
+                        '"'
+                    } else {
+                        '\''
+                    };
                     if let Some(end) = html[start..].find(quote) {
-                        let inner_url = resolve_url(html[start..start+end].trim());
+                        let inner_url = resolve_url(html[start..start + end].trim());
                         if inner_url.starts_with("http") && inner_url != url {
-                            if let Ok(sub) = Box::pin(scrape_radio_url_internal(proxy_port, inner_url)).await {
+                            if let Ok(sub) =
+                                Box::pin(scrape_radio_url_internal(proxy_port, inner_url)).await
+                            {
                                 for s in sub.stream_urls {
-                                    if !stream_urls.contains(&s) { stream_urls.push(s); }
+                                    if !stream_urls.contains(&s) {
+                                        stream_urls.push(s);
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 idx += pos + 10;
-                if stream_urls.len() > 3 || idx >= html_lower.len() { break; }
+                if stream_urls.len() > 3 || idx >= html_lower.len() {
+                    break;
+                }
             }
         }
     }
@@ -373,9 +442,13 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
                     let mut clean = String::new();
                     let mut in_tag = false;
                     for c in raw.chars() {
-                        if c == '<' { in_tag = true; }
-                        else if c == '>' { in_tag = false; }
-                        else if !in_tag { clean.push(c); }
+                        if c == '<' {
+                            in_tag = true;
+                        } else if c == '>' {
+                            in_tag = false;
+                        } else if !in_tag {
+                            clean.push(c);
+                        }
                     }
                     name = clean.trim().to_string();
                 }
@@ -426,10 +499,20 @@ pub async fn scrape_radio_url_internal(proxy_port: u16, url: String) -> Result<S
     }
 
     // Decode HTML entities in name
-    name = name.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        .replace("&quot;", "\"").replace("&#39;", "'").replace("&#x27;", "'");
+    name = name
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#x27;", "'");
 
-    info!("Scraped: name='{}', streams={}, favicon='{}'", name, stream_urls.len(), favicon);
+    info!(
+        "Scraped: name='{}', streams={}, favicon='{}'",
+        name,
+        stream_urls.len(),
+        favicon
+    );
 
     Ok(ScrapeResult {
         name,

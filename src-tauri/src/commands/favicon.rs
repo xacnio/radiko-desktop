@@ -1,11 +1,11 @@
 //! Favicon / cover image commands: download, upload, batch cache, image search.
 
-use tracing::info;
 use tauri::{AppHandle, Emitter, Manager};
+use tracing::info;
 
 use crate::error::AppError;
 
-use super::{path_to_file_url, app_data_dir};
+use super::{app_data_dir, path_to_file_url};
 
 /// Download and cache a cover image, converting to PNG for SMTC compatibility.
 /// Used internally by the player command and also exposed for batch operations.
@@ -40,8 +40,9 @@ pub(crate) async fn download_cover(url: String, app: AppHandle) -> Result<String
         // Handle data URL (base64)
         if let Some(comma_pos) = url.find(',') {
             let base64_str = &url[comma_pos + 1..];
-            use base64::{Engine as _, engine::general_purpose};
-            general_purpose::STANDARD.decode(base64_str)
+            use base64::{engine::general_purpose, Engine as _};
+            general_purpose::STANDARD
+                .decode(base64_str)
                 .map_err(|e| format!("base64 decode failed: {}", e))?
         } else {
             return Err("invalid data url".into());
@@ -52,12 +53,19 @@ pub(crate) async fn download_cover(url: String, app: AppHandle) -> Result<String
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| e.to_string())?;
-        
-        let resp = client.get(&url).send().await.map_err(|e| format!("download failed: {}", e))?;
+
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("download failed: {}", e))?;
         if !resp.status().is_success() {
             return Err(format!("HTTP {}", resp.status()));
         }
-        resp.bytes().await.map_err(|e| format!("read body failed: {}", e))?.to_vec()
+        resp.bytes()
+            .await
+            .map_err(|e| format!("read body failed: {}", e))?
+            .to_vec()
     };
 
     if bytes.is_empty() {
@@ -65,16 +73,19 @@ pub(crate) async fn download_cover(url: String, app: AppHandle) -> Result<String
     }
 
     // Decode the image (supports png, jpg, webp, gif, ico) and re-encode as PNG
-    let img = image::load_from_memory(&bytes)
-        .map_err(|e| format!("image decode failed: {}", e))?;
+    let img = image::load_from_memory(&bytes).map_err(|e| format!("image decode failed: {}", e))?;
 
     img.save_with_format(&file_path, image::ImageFormat::Png)
         .map_err(|e| format!("png save failed: {}", e))?;
 
-    info!("download_cover: converted to PNG at {:?} (original {} bytes)", file_path, bytes.len());
+    info!(
+        "download_cover: converted to PNG at {:?} (original {} bytes)",
+        file_path,
+        bytes.len()
+    );
 
     let result = path_to_file_url(&file_path);
-    
+
     info!("download_cover: returning {}", result);
     Ok(result)
 }
@@ -97,10 +108,11 @@ pub async fn batch_cache_favicons(
     let total = entries.len() as u32;
     let done = Arc::new(AtomicU32::new(0));
 
-    let cache_dir = app.path().app_cache_dir()
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
         .map_err(|e| AppError::Connection(e.to_string()))?;
-    std::fs::create_dir_all(&cache_dir)
-        .map_err(|e| AppError::Connection(e.to_string()))?;
+    std::fs::create_dir_all(&cache_dir).map_err(|e| AppError::Connection(e.to_string()))?;
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
@@ -137,24 +149,34 @@ pub async fn batch_cache_favicons(
                     }
 
                     let resp = client.get(&entry.url).send().await.ok()?;
-                    if !resp.status().is_success() { return None; }
+                    if !resp.status().is_success() {
+                        return None;
+                    }
                     let bytes = resp.bytes().await.ok()?;
-                    if bytes.is_empty() { return None; }
+                    if bytes.is_empty() {
+                        return None;
+                    }
 
                     let img = image::load_from_memory(&bytes).ok()?;
                     let thumb = img.thumbnail(64, 64);
-                    thumb.save_with_format(&file_path, image::ImageFormat::Png).ok()?;
+                    thumb
+                        .save_with_format(&file_path, image::ImageFormat::Png)
+                        .ok()?;
 
                     let p = path_to_file_url(&file_path);
                     Some((entry.uuid.clone(), p))
-                }.await;
+                }
+                .await;
 
                 // Emit progress
                 let current = done.fetch_add(1, Ordering::Relaxed) + 1;
-                let _ = app.emit("favicon-progress", serde_json::json!({
-                    "done": current,
-                    "total": total,
-                }));
+                let _ = app.emit(
+                    "favicon-progress",
+                    serde_json::json!({
+                        "done": current,
+                        "total": total,
+                    }),
+                );
 
                 result
             }
@@ -163,21 +185,32 @@ pub async fn batch_cache_favicons(
         .collect::<Vec<_>>()
         .await;
 
-    let map: std::collections::HashMap<String, String> = results
-        .into_iter()
-        .flatten()
-        .collect();
+    let map: std::collections::HashMap<String, String> = results.into_iter().flatten().collect();
 
     info!("batch_cache_favicons: cached {}/{}", map.len(), total);
     Ok(map)
 }
 
 #[tauri::command]
-pub async fn upload_custom_favicon(app: AppHandle, bytes: Vec<u8>, ext: String) -> Result<String, AppError> {
+pub async fn upload_custom_favicon(
+    app: AppHandle,
+    bytes: Vec<u8>,
+    ext: String,
+) -> Result<String, AppError> {
     let dir = app_data_dir(&app)?;
-    let p = dir.join(format!("custom_{}.{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(), ext));
+    let p = dir.join(format!(
+        "custom_{}.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+        ext
+    ));
     std::fs::write(&p, bytes).map_err(|e| AppError::Settings(e.to_string()))?;
-    Ok(format!("file:///{}", p.to_string_lossy().replace("\\", "/")))
+    Ok(format!(
+        "file:///{}",
+        p.to_string_lossy().replace("\\", "/")
+    ))
 }
 
 #[tauri::command]
@@ -185,28 +218,46 @@ pub async fn download_custom_favicon(app: AppHandle, url: String) -> Result<Stri
     // Handle base64 data URIs directly (from Google Image search)
     if url.starts_with("data:image/") {
         // Parse: data:image/png;base64,iVBORw0KGgo...
-        let ext = if url.starts_with("data:image/png") { "png" }
-                  else if url.starts_with("data:image/webp") { "webp" }
-                  else { "jpg" };
-        
-        let base64_data = url.find(",")
+        let ext = if url.starts_with("data:image/png") {
+            "png"
+        } else if url.starts_with("data:image/webp") {
+            "webp"
+        } else {
+            "jpg"
+        };
+
+        let base64_data = url
+            .find(",")
             .map(|pos| &url[pos + 1..])
             .ok_or_else(|| AppError::Settings("Invalid data URI".into()))?;
-        
+
         use base64::Engine;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(base64_data)
             .map_err(|e| AppError::Settings(format!("Base64 decode error: {}", e)))?;
-        
+
         if bytes.len() < 100 {
             return Err(AppError::Settings("Image too small".into()));
         }
-        
-        let dir = app.path().app_cache_dir().map_err(|e| AppError::Settings(e.to_string()))?;
+
+        let dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|e| AppError::Settings(e.to_string()))?;
         std::fs::create_dir_all(&dir).map_err(|e| AppError::Settings(e.to_string()))?;
-        let p = dir.join(format!("custom_dl_{}.{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(), ext));
+        let p = dir.join(format!(
+            "custom_dl_{}.{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+            ext
+        ));
         std::fs::write(&p, bytes).map_err(|e| AppError::Settings(e.to_string()))?;
-        return Ok(format!("file:///{}", p.to_string_lossy().replace("\\", "/")));
+        return Ok(format!(
+            "file:///{}",
+            p.to_string_lossy().replace("\\", "/")
+        ));
     }
 
     // Regular URL download
@@ -216,38 +267,71 @@ pub async fn download_custom_favicon(app: AppHandle, url: String) -> Result<Stri
         .build()
         .map_err(|e| AppError::Settings(e.to_string()))?;
 
-    let resp = client.get(&url).send().await.map_err(|e| AppError::Settings(e.to_string()))?;
-    
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| AppError::Settings(e.to_string()))?;
+
     if !resp.status().is_success() {
-        return Err(AppError::Settings(format!("Download failed: {}", resp.status())));
+        return Err(AppError::Settings(format!(
+            "Download failed: {}",
+            resp.status()
+        )));
     }
 
     // Guess extension
-    let content_type = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("");
-    let ext = if content_type.contains("png") { "png" }
-              else if content_type.contains("webp") { "webp" }
-              else if content_type.contains("gif") { "gif" }
-              else if content_type.contains("svg") { "svg" }
-              else { "jpg" };
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let ext = if content_type.contains("png") {
+        "png"
+    } else if content_type.contains("webp") {
+        "webp"
+    } else if content_type.contains("gif") {
+        "gif"
+    } else if content_type.contains("svg") {
+        "svg"
+    } else {
+        "jpg"
+    };
 
-    let bytes = resp.bytes().await.map_err(|e| AppError::Settings(e.to_string()))?;
-    
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| AppError::Settings(e.to_string()))?;
+
     // Ignore truly tiny images (tracking pixels)
     if bytes.len() < 100 {
         return Err(AppError::Settings("Image too small".into()));
     }
 
-    let dir = app.path().app_cache_dir().map_err(|e| AppError::Settings(e.to_string()))?;
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| AppError::Settings(e.to_string()))?;
     std::fs::create_dir_all(&dir).map_err(|e| AppError::Settings(e.to_string()))?;
-    let p = dir.join(format!("custom_dl_{}.{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(), ext));
+    let p = dir.join(format!(
+        "custom_dl_{}.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+        ext
+    ));
     std::fs::write(&p, bytes).map_err(|e| AppError::Settings(e.to_string()))?;
-    Ok(format!("file:///{}", p.to_string_lossy().replace("\\", "/")))
+    Ok(format!(
+        "file:///{}",
+        p.to_string_lossy().replace("\\", "/")
+    ))
 }
 
 #[tauri::command]
 pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>, AppError> {
     info!("Searching images for: {}", encoded_query);
-    
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
         .redirect(reqwest::redirect::Policy::limited(5))
@@ -256,14 +340,19 @@ pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>
         .map_err(|e: reqwest::Error| AppError::Settings(e.to_string()))?;
 
     // Search URL with critical parameters: udm=2 (modern), imgar=s (square)
-    let url = format!("https://www.google.com/search?q={}&udm=2&imgar=s&hl=tr", encoded_query);
-    
+    let url = format!(
+        "https://www.google.com/search?q={}&udm=2&imgar=s&hl=tr",
+        encoded_query
+    );
+
     let resp = client.get(&url)
         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
         .header("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
         .send().await
         .map_err(|e: reqwest::Error| AppError::Settings(e.to_string()))?;
-    let text = resp.text().await
+    let text = resp
+        .text()
+        .await
         .map_err(|e: reqwest::Error| AppError::Settings(e.to_string()))?;
 
     let mut results = Vec::new();
@@ -289,7 +378,8 @@ pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>
     info!("Found {} result image IDs in page order", result_ids.len());
 
     // STEP 2: Build a map of dimg_ID -> base64 image data from JS blocks
-    let mut id_to_image: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut id_to_image: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     {
         let marker = "(function(){var s='data:image/";
         let mut search_idx = 0;
@@ -297,7 +387,7 @@ pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>
             let data_start = search_idx + pos + "(function(){var s='".len();
             if let Some(end) = text[data_start..].find("';") {
                 let mut img_data = text[data_start..data_start + end].to_string();
-                
+
                 img_data = img_data
                     .replace("\\x3d", "=")
                     .replace("\\x26", "&")
@@ -305,11 +395,11 @@ pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>
                     .replace("\\u003d", "=")
                     .replace("\\u0026", "&")
                     .replace("\\/", "/");
-                
-                let is_real = img_data.starts_with("data:image/jpeg") || 
-                             img_data.starts_with("data:image/png") || 
-                             img_data.starts_with("data:image/webp");
-                
+
+                let is_real = img_data.starts_with("data:image/jpeg")
+                    || img_data.starts_with("data:image/png")
+                    || img_data.starts_with("data:image/webp");
+
                 if is_real && img_data.len() > 500 {
                     let after = &text[data_start + end..];
                     if let Some(ii_pos) = after.find("var ii=[") {
@@ -345,9 +435,15 @@ pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>
                 results.push(img_data.clone());
             }
         }
-        if results.len() >= 30 { break; }
+        if results.len() >= 30 {
+            break;
+        }
     }
 
-    info!("Found {} result images for: {}", results.len(), encoded_query);
+    info!(
+        "Found {} result images for: {}",
+        results.len(),
+        encoded_query
+    );
     Ok(results)
 }

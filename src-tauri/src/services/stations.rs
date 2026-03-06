@@ -163,7 +163,11 @@ pub async fn top_stations(limit: Option<u32>) -> Result<Vec<Station>, AppError> 
 pub async fn countries() -> Result<Vec<CountryItem>, AppError> {
     let resp = client()
         .get(format!("{}/countries", API_BASE))
-        .query(&[("order", "stationcount"), ("reverse", "true"), ("hidebroken", "true")])
+        .query(&[
+            ("order", "stationcount"),
+            ("reverse", "true"),
+            ("hidebroken", "true"),
+        ])
         .send()
         .await
         .map_err(|e| AppError::Connection(e.to_string()))?;
@@ -181,7 +185,11 @@ pub async fn countries() -> Result<Vec<CountryItem>, AppError> {
 pub async fn languages() -> Result<Vec<LanguageItem>, AppError> {
     let resp = client()
         .get(format!("{}/languages", API_BASE))
-        .query(&[("order", "stationcount"), ("reverse", "true"), ("hidebroken", "true")])
+        .query(&[
+            ("order", "stationcount"),
+            ("reverse", "true"),
+            ("hidebroken", "true"),
+        ])
         .send()
         .await
         .map_err(|e| AppError::Connection(e.to_string()))?;
@@ -242,7 +250,10 @@ pub async fn states(country: String) -> Result<Vec<StateItem>, AppError> {
         .await
         .map_err(|e| AppError::Connection(format!("Parse error: {}", e)))?;
 
-    Ok(items.into_iter().filter(|s| !s.name.is_empty() && s.stationcount > 0).collect())
+    Ok(items
+        .into_iter()
+        .filter(|s| !s.name.is_empty() && s.stationcount > 0)
+        .collect())
 }
 
 /// Get ALL stations for a country by paginating through results.

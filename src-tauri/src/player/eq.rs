@@ -24,8 +24,7 @@ static EQ_GAINS: [AtomicI32; NUM_BANDS] = [
 ];
 
 /// Whether the EQ is enabled.
-static EQ_ENABLED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(true);
+static EQ_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Set gain for a specific band (in dB, clamped to ±12).
 pub fn set_gain(band: usize, db: f32) {
@@ -34,7 +33,6 @@ pub fn set_gain(band: usize, db: f32) {
         EQ_GAINS[band].store((clamped * 100.0) as i32, Ordering::Relaxed);
     }
 }
-
 
 /// Get all band gains as an array.
 pub fn get_all_gains() -> [f32; NUM_BANDS] {
@@ -64,9 +62,13 @@ pub fn is_enabled() -> bool {
 
 /// Second-order biquad filter (Direct Form II Transposed).
 struct BiquadFilter {
-    b0: f32, b1: f32, b2: f32,
-    a1: f32, a2: f32,
-    z1: f32, z2: f32,
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
+    z1: f32,
+    z2: f32,
 }
 
 impl BiquadFilter {
@@ -166,12 +168,7 @@ impl Equalizer {
         if current_gains != self.cached_gains {
             for ch in 0..self.channels {
                 for (band, &freq) in BAND_FREQS.iter().enumerate() {
-                    self.filters[ch][band].update(
-                        freq,
-                        current_gains[band],
-                        1.4,
-                        self.sample_rate,
-                    );
+                    self.filters[ch][band].update(freq, current_gains[band], 1.4, self.sample_rate);
                 }
             }
             self.cached_gains = current_gains;

@@ -2,7 +2,7 @@
 //!
 //! Windows SMTC reads the app name from the Start Menu shortcut that has a matching
 //! AppUserModelID. Without this shortcut, SMTC shows "Unknown app".
-//! 
+//!
 //! We use PowerShell to create the shortcut since the Windows Shell COM APIs
 //! are complex to use correctly from Rust.
 
@@ -195,7 +195,11 @@ public class ShortcutHelper {{
             if output.status.success() {
                 info!("AppUserModelID set: {}", stdout.trim());
             } else {
-                warn!("Failed to set AppUserModelID: {} {}", stdout.trim(), stderr.trim());
+                warn!(
+                    "Failed to set AppUserModelID: {} {}",
+                    stdout.trim(),
+                    stderr.trim()
+                );
             }
         }
         Err(e) => {

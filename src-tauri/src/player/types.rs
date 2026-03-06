@@ -26,4 +26,6 @@ pub struct StatusResponse {
     pub url: Option<String>,
     pub volume: f32,
     pub metadata: Option<StreamMetadata>,
+    pub station_name: Option<String>,
+    pub station_image: Option<String>,
 }

@@ -9,7 +9,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
-static LOCALES_DIR: include_dir::Dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../src/locales");
+static LOCALES_DIR: include_dir::Dir =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../src/locales");
 
 // ── Constants ────────────────────────────────────────────────────────
 const WM_COMMAND: u32 = 0x0111;
@@ -31,14 +32,23 @@ const SZ: i32 = 20; // 20×20 for better quality
 
 // ── Win32 / COM types ────────────────────────────────────────────────
 #[repr(C)]
-struct GUID { data1: u32, data2: u16, data3: u16, data4: [u8; 8] }
+struct GUID {
+    data1: u32,
+    data2: u16,
+    data3: u16,
+    data4: [u8; 8],
+}
 
 const CLSID_TASKBAR_LIST: GUID = GUID {
-    data1: 0x56FDF344, data2: 0xFD6D, data3: 0x11D0,
+    data1: 0x56FDF344,
+    data2: 0xFD6D,
+    data3: 0x11D0,
     data4: [0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90],
 };
 const IID_ITASKBARLIST3: GUID = GUID {
-    data1: 0xEA1AFB91, data2: 0x9E28, data3: 0x4B86,
+    data1: 0xEA1AFB91,
+    data2: 0x9E28,
+    data3: 0x4B86,
     data4: [0x90, 0xE9, 0x9E, 0x9F, 0x8A, 0x5E, 0xEF, 0xAF],
 };
 
@@ -48,41 +58,75 @@ type HRESULT = i32;
 #[repr(C)]
 #[derive(Clone)]
 struct THUMBBUTTON {
-    dw_mask: u32, i_id: u32, i_bitmap: u32, h_icon: isize,
-    sz_tip: [u16; 260], dw_flags: u32,
+    dw_mask: u32,
+    i_id: u32,
+    i_bitmap: u32,
+    h_icon: isize,
+    sz_tip: [u16; 260],
+    dw_flags: u32,
 }
 
 #[repr(C)]
 struct BITMAPINFOHEADER {
-    bi_size: u32, bi_width: i32, bi_height: i32,
-    bi_planes: u16, bi_bit_count: u16, bi_compression: u32,
-    bi_size_image: u32, bi_x_ppm: i32, bi_y_ppm: i32,
-    bi_clr_used: u32, bi_clr_important: u32,
+    bi_size: u32,
+    bi_width: i32,
+    bi_height: i32,
+    bi_planes: u16,
+    bi_bit_count: u16,
+    bi_compression: u32,
+    bi_size_image: u32,
+    bi_x_ppm: i32,
+    bi_y_ppm: i32,
+    bi_clr_used: u32,
+    bi_clr_important: u32,
 }
 
 #[repr(C)]
 struct ICONINFO {
-    f_icon: i32, x_hotspot: u32, y_hotspot: u32,
-    hbm_mask: isize, hbm_color: isize,
+    f_icon: i32,
+    x_hotspot: u32,
+    y_hotspot: u32,
+    hbm_mask: isize,
+    hbm_color: isize,
 }
 
 #[repr(C)]
 struct ITaskbarList3Vtbl {
-    query_interface: usize, add_ref: usize, release: usize,
-    hr_init: usize, add_tab: usize, delete_tab: usize, activate_tab: usize,
-    set_active_alt: usize, mark_fullscreen_window: usize,
-    set_progress_value: usize, set_progress_state: usize,
-    register_tab: usize, unregister_tab: usize, set_tab_order: usize, set_tab_active: usize,
-    thumb_bar_add_buttons: unsafe extern "system" fn(*mut ITaskbarList3, HWND, u32, *const THUMBBUTTON) -> HRESULT,
-    thumb_bar_update_buttons: unsafe extern "system" fn(*mut ITaskbarList3, HWND, u32, *const THUMBBUTTON) -> HRESULT,
+    query_interface: usize,
+    add_ref: usize,
+    release: usize,
+    hr_init: usize,
+    add_tab: usize,
+    delete_tab: usize,
+    activate_tab: usize,
+    set_active_alt: usize,
+    mark_fullscreen_window: usize,
+    set_progress_value: usize,
+    set_progress_state: usize,
+    register_tab: usize,
+    unregister_tab: usize,
+    set_tab_order: usize,
+    set_tab_active: usize,
+    thumb_bar_add_buttons:
+        unsafe extern "system" fn(*mut ITaskbarList3, HWND, u32, *const THUMBBUTTON) -> HRESULT,
+    thumb_bar_update_buttons:
+        unsafe extern "system" fn(*mut ITaskbarList3, HWND, u32, *const THUMBBUTTON) -> HRESULT,
 }
 
 #[repr(C)]
-struct ITaskbarList3 { vtbl: *const ITaskbarList3Vtbl }
+struct ITaskbarList3 {
+    vtbl: *const ITaskbarList3Vtbl,
+}
 
 extern "system" {
     fn CoInitializeEx(reserved: *const std::ffi::c_void, flags: u32) -> HRESULT;
-    fn CoCreateInstance(rclsid: *const GUID, outer: *const std::ffi::c_void, ctx: u32, riid: *const GUID, ppv: *mut *mut std::ffi::c_void) -> HRESULT;
+    fn CoCreateInstance(
+        rclsid: *const GUID,
+        outer: *const std::ffi::c_void,
+        ctx: u32,
+        riid: *const GUID,
+        ppv: *mut *mut std::ffi::c_void,
+    ) -> HRESULT;
     fn SetWindowLongPtrW(hwnd: HWND, index: i32, new_long: isize) -> isize;
     fn GetWindowLongPtrW(hwnd: HWND, index: i32) -> isize;
     fn CallWindowProcW(prev: isize, hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize;
@@ -90,7 +134,14 @@ extern "system" {
     fn CreateCompatibleDC(hdc: isize) -> isize;
     fn DeleteDC(hdc: isize) -> i32;
     fn DeleteObject(obj: isize) -> i32;
-    fn CreateDIBSection(hdc: isize, pbmi: *const BITMAPINFOHEADER, usage: u32, ppv_bits: *mut *mut u8, h_section: isize, offset: u32) -> isize;
+    fn CreateDIBSection(
+        hdc: isize,
+        pbmi: *const BITMAPINFOHEADER,
+        usage: u32,
+        ppv_bits: *mut *mut u8,
+        h_section: isize,
+        offset: u32,
+    ) -> isize;
     fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> isize;
     fn PostMessageW(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> i32;
 }
@@ -112,16 +163,25 @@ static THUMB_STATE: Mutex<Option<ThumbBarState>> = Mutex::new(None);
 static mut ORIGINAL_WNDPROC: isize = 0;
 static mut APP_HANDLE: Option<AppHandle> = None;
 
-unsafe extern "system" fn thumb_wndproc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
+unsafe extern "system" fn thumb_wndproc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: usize,
+    lparam: isize,
+) -> isize {
     if msg == WM_COMMAND {
         let id = (wparam & 0xFFFF) as u32;
         let code = ((wparam >> 16) & 0xFFFF) as u16;
         if code == THBN_CLICKED {
             if let Some(ref handle) = APP_HANDLE {
                 match id {
-                    BTN_PREV => { let _ = handle.emit("media-key", "previous"); }
+                    BTN_PREV => {
+                        let _ = handle.emit("media-key", "previous");
+                    }
                     BTN_PLAYPAUSE => {
-                        let is_playing = THUMB_STATE.lock().ok()
+                        let is_playing = THUMB_STATE
+                            .lock()
+                            .ok()
                             .and_then(|s| s.as_ref().map(|ts| ts.is_playing))
                             .unwrap_or(false);
                         if is_playing {
@@ -130,7 +190,9 @@ unsafe extern "system" fn thumb_wndproc(hwnd: HWND, msg: u32, wparam: usize, lpa
                             let _ = handle.emit("media-key", "toggle");
                         }
                     }
-                    BTN_NEXT => { let _ = handle.emit("media-key", "next"); }
+                    BTN_NEXT => {
+                        let _ = handle.emit("media-key", "next");
+                    }
                     _ => {}
                 }
             }
@@ -149,14 +211,24 @@ unsafe extern "system" fn thumb_wndproc(hwnd: HWND, msg: u32, wparam: usize, lpa
 fn do_update_button() {
     if let Ok(guard) = THUMB_STATE.lock() {
         if let Some(ref state) = *guard {
-            if !state.ready { return; }
+            if !state.ready {
+                return;
+            }
             let mask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
             let button = THUMBBUTTON {
                 dw_mask: mask,
                 i_id: BTN_PLAYPAUSE,
                 i_bitmap: 0,
-                h_icon: if state.is_playing { state.icon_pause } else { state.icon_play },
-                sz_tip: if state.is_playing { state.tip_pause } else { state.tip_play },
+                h_icon: if state.is_playing {
+                    state.icon_pause
+                } else {
+                    state.icon_play
+                },
+                sz_tip: if state.is_playing {
+                    state.tip_pause
+                } else {
+                    state.tip_play
+                },
                 dw_flags: THBF_ENABLED,
             };
             unsafe {
@@ -175,10 +247,16 @@ unsafe fn make_icon(pixels: &[u32; PIXELS]) -> isize {
     let hdc = CreateCompatibleDC(0);
     let bmi = BITMAPINFOHEADER {
         bi_size: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-        bi_width: SZ, bi_height: -SZ,
-        bi_planes: 1, bi_bit_count: 32, bi_compression: 0,
-        bi_size_image: 0, bi_x_ppm: 0, bi_y_ppm: 0,
-        bi_clr_used: 0, bi_clr_important: 0,
+        bi_width: SZ,
+        bi_height: -SZ,
+        bi_planes: 1,
+        bi_bit_count: 32,
+        bi_compression: 0,
+        bi_size_image: 0,
+        bi_x_ppm: 0,
+        bi_y_ppm: 0,
+        bi_clr_used: 0,
+        bi_clr_important: 0,
     };
     let mut bits: *mut u8 = std::ptr::null_mut();
     let hbm_color = CreateDIBSection(hdc, &bmi, 0, &mut bits, 0, 0);
@@ -188,7 +266,13 @@ unsafe fn make_icon(pixels: &[u32; PIXELS]) -> isize {
     let mask_bytes = ((SZ + 31) / 32 * 4 * SZ) as usize; // WORD-aligned
     let mask = vec![0u8; mask_bytes];
     let hbm_mask = CreateBitmap(SZ, SZ, 1, 1, mask.as_ptr());
-    let info = ICONINFO { f_icon: 1, x_hotspot: 0, y_hotspot: 0, hbm_mask, hbm_color };
+    let info = ICONINFO {
+        f_icon: 1,
+        x_hotspot: 0,
+        y_hotspot: 0,
+        hbm_mask,
+        hbm_color,
+    };
     let icon = CreateIconIndirect(&info);
     DeleteObject(hbm_color);
     DeleteObject(hbm_mask);
@@ -219,34 +303,45 @@ fn tri_right_aa(buf: &mut [u32; PIXELS], cx: f32, cy: f32, half_h: f32) {
     let tip_x = cx + half_h;
     let top_y = cy - half_h;
     let bot_y = cy + half_h;
-    
+
     for py in 0..SZ {
         for ppx in 0..SZ {
             let fx = ppx as f32 + 0.5;
             let fy = py as f32 + 0.5;
-            
+
             // Check if point is inside triangle
             // The triangle has: left edge at base_x, right tip at tip_x
             // Top edge: from (base_x, top_y) to (tip_x, cy)
             // Bottom edge: from (base_x, bot_y) to (tip_x, cy)
-            
-            if fx < base_x - 0.5 || fx > tip_x + 0.5 { continue; }
-            if fy < top_y - 0.5 || fy > bot_y + 0.5 { continue; }
-            
+
+            if fx < base_x - 0.5 || fx > tip_x + 0.5 {
+                continue;
+            }
+            if fy < top_y - 0.5 || fy > bot_y + 0.5 {
+                continue;
+            }
+
             // At x position fx, the triangle spans from top_edge_y to bot_edge_y
-            let t = if (tip_x - base_x).abs() < 0.001 { 0.0 } else { (fx - base_x) / (tip_x - base_x) };
+            let t = if (tip_x - base_x).abs() < 0.001 {
+                0.0
+            } else {
+                (fx - base_x) / (tip_x - base_x)
+            };
             let t = t.clamp(0.0, 1.0);
             let edge_top = top_y + t * (cy - top_y);
             let edge_bot = bot_y + t * (cy - bot_y);
-            
+
             // Distance from edges for anti-aliasing
             let inside_left = fx - base_x;
             let inside_right = tip_x - fx;
             let inside_top = fy - edge_top;
             let inside_bot = edge_bot - fy;
-            
-            let min_dist = inside_left.min(inside_right).min(inside_top).min(inside_bot);
-            
+
+            let min_dist = inside_left
+                .min(inside_right)
+                .min(inside_top)
+                .min(inside_bot);
+
             if min_dist >= 0.5 {
                 px(buf, ppx, py);
             } else if min_dist > -0.5 {
@@ -265,27 +360,38 @@ fn tri_left_aa(buf: &mut [u32; PIXELS], cx: f32, cy: f32, half_h: f32) {
     let base_x = cx + half_h;
     let top_y = cy - half_h;
     let bot_y = cy + half_h;
-    
+
     for py in 0..SZ {
         for ppx in 0..SZ {
             let fx = ppx as f32 + 0.5;
             let fy = py as f32 + 0.5;
-            
-            if fx < tip_x - 0.5 || fx > base_x + 0.5 { continue; }
-            if fy < top_y - 0.5 || fy > bot_y + 0.5 { continue; }
-            
-            let t = if (base_x - tip_x).abs() < 0.001 { 0.0 } else { (base_x - fx) / (base_x - tip_x) };
+
+            if fx < tip_x - 0.5 || fx > base_x + 0.5 {
+                continue;
+            }
+            if fy < top_y - 0.5 || fy > bot_y + 0.5 {
+                continue;
+            }
+
+            let t = if (base_x - tip_x).abs() < 0.001 {
+                0.0
+            } else {
+                (base_x - fx) / (base_x - tip_x)
+            };
             let t = t.clamp(0.0, 1.0);
             let edge_top = top_y + t * (cy - top_y);
             let edge_bot = bot_y + t * (cy - bot_y);
-            
+
             let inside_left = fx - tip_x;
             let inside_right = base_x - fx;
             let inside_top = fy - edge_top;
             let inside_bot = edge_bot - fy;
-            
-            let min_dist = inside_left.min(inside_right).min(inside_top).min(inside_bot);
-            
+
+            let min_dist = inside_left
+                .min(inside_right)
+                .min(inside_top)
+                .min(inside_bot);
+
             if min_dist >= 0.5 {
                 px(buf, ppx, py);
             } else if min_dist > -0.5 {
@@ -304,18 +410,20 @@ fn rect_aa(buf: &mut [u32; PIXELS], x1: f32, y1: f32, x2: f32, y2: f32) {
         for ppx in 0..SZ {
             let fx = ppx as f32 + 0.5;
             let fy = py as f32 + 0.5;
-            
+
             let dl = fx - x1;
             let dr = x2 - fx;
             let dt = fy - y1;
             let db = y2 - fy;
             let min_d = dl.min(dr).min(dt).min(db);
-            
+
             if min_d >= 0.5 {
                 px(buf, ppx, py);
             } else if min_d > -0.5 {
                 let alpha = ((min_d + 0.5) * 255.0) as u8;
-                if alpha > 10 { px_aa(buf, ppx, py, alpha); }
+                if alpha > 10 {
+                    px_aa(buf, ppx, py, alpha);
+                }
             }
         }
     }
@@ -361,7 +469,8 @@ fn get_tooltip(key: &str, fallback: &str) -> String {
     let mut lang_code = String::new();
     if let Ok(appdata) = std::env::var("APPDATA") {
         let path = std::path::PathBuf::from(appdata)
-            .join("dev.xacnio.radikodesktop").join("settings.json");
+            .join("dev.xacnio.radikodesktop")
+            .join("settings.json");
         if let Ok(content) = std::fs::read_to_string(path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(l) = json.get("language").and_then(|v| v.as_str()) {
@@ -383,15 +492,24 @@ fn get_tooltip(key: &str, fallback: &str) -> String {
                 lang_code = s.to_lowercase();
             }
         }
-        if lang_code.is_empty() { lang_code = "en".to_string(); }
+        if lang_code.is_empty() {
+            lang_code = "en".to_string();
+        }
     }
     let file_name = format!("{}.json", lang_code);
-    if let Some(file) = LOCALES_DIR.get_file(&file_name).or_else(|| LOCALES_DIR.get_file("en.json")) {
+    if let Some(file) = LOCALES_DIR
+        .get_file(&file_name)
+        .or_else(|| LOCALES_DIR.get_file("en.json"))
+    {
         if let Some(json_str) = file.contents_utf8() {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
                 let parts: Vec<&str> = key.split('.').collect();
                 if parts.len() == 2 {
-                    if let Some(s) = v.get(parts[0]).and_then(|o| o.get(parts[1])).and_then(|s| s.as_str()) {
+                    if let Some(s) = v
+                        .get(parts[0])
+                        .and_then(|o| o.get(parts[1]))
+                        .and_then(|s| s.as_str())
+                    {
                         return s.to_string();
                     }
                 }
@@ -404,7 +522,9 @@ fn get_tooltip(key: &str, fallback: &str) -> String {
 fn make_tip(s: &str) -> [u16; 260] {
     let mut buf = [0u16; 260];
     for (i, c) in s.encode_utf16().enumerate() {
-        if i >= 259 { break; }
+        if i >= 259 {
+            break;
+        }
         buf[i] = c;
     }
     buf
@@ -425,7 +545,13 @@ pub fn setup_thumb_buttons(hwnd_raw: isize, app_handle: AppHandle) {
             CoInitializeEx(std::ptr::null(), 0x2); // COINIT_APARTMENTTHREADED
 
             let mut ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-            let hr = CoCreateInstance(&CLSID_TASKBAR_LIST, std::ptr::null(), 1, &IID_ITASKBARLIST3, &mut ptr);
+            let hr = CoCreateInstance(
+                &CLSID_TASKBAR_LIST,
+                std::ptr::null(),
+                1,
+                &IID_ITASKBARLIST3,
+                &mut ptr,
+            );
             if hr != 0 || ptr.is_null() {
                 warn!("ITaskbarList3 creation failed: 0x{:08X}", hr);
                 return;
@@ -433,7 +559,8 @@ pub fn setup_thumb_buttons(hwnd_raw: isize, app_handle: AppHandle) {
 
             let tbl = ptr as *mut ITaskbarList3;
             let vtbl = &*(*tbl).vtbl;
-            let hr_init: unsafe extern "system" fn(*mut ITaskbarList3) -> HRESULT = std::mem::transmute(vtbl.hr_init);
+            let hr_init: unsafe extern "system" fn(*mut ITaskbarList3) -> HRESULT =
+                std::mem::transmute(vtbl.hr_init);
             hr_init(tbl);
 
             let h_play = make_icon(&icon_play());
@@ -443,9 +570,30 @@ pub fn setup_thumb_buttons(hwnd_raw: isize, app_handle: AppHandle) {
 
             let mask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
             let buttons = [
-                THUMBBUTTON { dw_mask: mask, i_id: BTN_PREV, i_bitmap: 0, h_icon: h_prev, sz_tip: make_tip(&tip_prev_s), dw_flags: THBF_ENABLED },
-                THUMBBUTTON { dw_mask: mask, i_id: BTN_PLAYPAUSE, i_bitmap: 0, h_icon: h_play, sz_tip: make_tip(&tip_play_s), dw_flags: THBF_ENABLED },
-                THUMBBUTTON { dw_mask: mask, i_id: BTN_NEXT, i_bitmap: 0, h_icon: h_next, sz_tip: make_tip(&tip_next_s), dw_flags: THBF_ENABLED },
+                THUMBBUTTON {
+                    dw_mask: mask,
+                    i_id: BTN_PREV,
+                    i_bitmap: 0,
+                    h_icon: h_prev,
+                    sz_tip: make_tip(&tip_prev_s),
+                    dw_flags: THBF_ENABLED,
+                },
+                THUMBBUTTON {
+                    dw_mask: mask,
+                    i_id: BTN_PLAYPAUSE,
+                    i_bitmap: 0,
+                    h_icon: h_play,
+                    sz_tip: make_tip(&tip_play_s),
+                    dw_flags: THBF_ENABLED,
+                },
+                THUMBBUTTON {
+                    dw_mask: mask,
+                    i_id: BTN_NEXT,
+                    i_bitmap: 0,
+                    h_icon: h_next,
+                    sz_tip: make_tip(&tip_next_s),
+                    dw_flags: THBF_ENABLED,
+                },
             ];
 
             let hr = (vtbl.thumb_bar_add_buttons)(tbl, hwnd_raw, 3, buttons.as_ptr());
@@ -460,9 +608,13 @@ pub fn setup_thumb_buttons(hwnd_raw: isize, app_handle: AppHandle) {
             SetWindowLongPtrW(hwnd_raw, GWLP_WNDPROC, thumb_wndproc as *const () as isize);
 
             *THUMB_STATE.lock().unwrap() = Some(ThumbBarState {
-                tbl, hwnd: hwnd_raw, is_playing: false,
-                icon_play: h_play, icon_pause: h_pause,
-                tip_play: make_tip(&tip_play_s), tip_pause: make_tip(&tip_pause_s),
+                tbl,
+                hwnd: hwnd_raw,
+                is_playing: false,
+                icon_play: h_play,
+                icon_pause: h_pause,
+                tip_play: make_tip(&tip_play_s),
+                tip_pause: make_tip(&tip_pause_s),
                 ready: true,
             });
 
@@ -476,7 +628,9 @@ pub fn setup_thumb_buttons(hwnd_raw: isize, app_handle: AppHandle) {
 pub fn set_playing(playing: bool) {
     if let Ok(mut guard) = THUMB_STATE.lock() {
         if let Some(ref mut state) = *guard {
-            if !state.ready || state.is_playing == playing { return; }
+            if !state.ready || state.is_playing == playing {
+                return;
+            }
             state.is_playing = playing;
             // Post to window thread so COM update happens on the right thread
             unsafe {

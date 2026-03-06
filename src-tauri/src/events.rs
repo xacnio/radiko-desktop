@@ -1,8 +1,8 @@
 use tauri::{AppHandle, Emitter, Manager};
 use tracing::{error, info};
 
-use crate::services::media::MediaSession;
 use crate::player::types::{PlaybackStatus, StreamMetadata};
+use crate::services::media::MediaSession;
 
 pub fn emit_status(app: &AppHandle, status: PlaybackStatus) {
     info!("Playback status changed: {:?}", status);
@@ -31,10 +31,15 @@ pub fn emit_status(app: &AppHandle, status: PlaybackStatus) {
                         let artist = ps.station_name.as_deref().unwrap_or("Radiko");
                         let title_opt = ps.stream_metadata.as_ref().and_then(|m| m.title.clone());
                         let title = title_opt.as_deref().unwrap_or(artist);
-                        let cover = ps.station_image.as_deref()
+                        let cover = ps
+                            .station_image
+                            .as_deref()
                             .filter(|u| u.starts_with("file:///"))
                             .or(ps.default_cover.as_deref());
-                        info!("emit_status(Playing): station='{}', title='{}', cover={:?}", artist, title, cover);
+                        info!(
+                            "emit_status(Playing): station='{}', title='{}', cover={:?}",
+                            artist, title, cover
+                        );
                         ms.set_metadata(title, artist, cover);
                     } else {
                         error!("emit_status: failed to lock AppState");
@@ -83,7 +88,7 @@ pub fn emit_metadata(app: &AppHandle, metadata: StreamMetadata) {
     if let Some(ref title) = metadata.title {
         let app_handle = app.clone();
         let title_clone = title.clone();
-        
+
         let mut station_name = "Unknown Radio".to_string();
         if let Some(state) = app.try_state::<crate::state::AppState>() {
             if let Ok(ps) = state.inner.lock() {
@@ -92,9 +97,14 @@ pub fn emit_metadata(app: &AppHandle, metadata: StreamMetadata) {
                 }
             }
         }
-        
+
         tokio::spawn(async move {
-            crate::services::enricher::enrich_metadata_background(app_handle, title_clone, station_name).await;
+            crate::services::enricher::enrich_metadata_background(
+                app_handle,
+                title_clone,
+                station_name,
+            )
+            .await;
         });
     }
 
@@ -121,7 +131,7 @@ pub fn emit_metadata(app: &AppHandle, metadata: StreamMetadata) {
                 }
             }
         }
-        
+
         let title = metadata.title.as_deref().unwrap_or(&artist);
         ms.set_metadata(title, &artist, cover_url.as_deref());
 

@@ -1,7 +1,7 @@
 //! Player control commands: play, stop, pause, resume, volume, status, preview, audio level.
 
+use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::{info, warn};
-use tauri::{AppHandle, Manager, State};
 
 use crate::error::AppError;
 use crate::events;
@@ -14,7 +14,11 @@ use super::{app_data_dir, favicon::download_cover};
 
 #[tauri::command]
 pub fn get_proxy_url(state: State<'_, AppState>, url: String) -> String {
-    format!("http://127.0.0.1:{}/proxy?url={}", state.proxy_port, urlencoding::encode(&url))
+    format!(
+        "http://127.0.0.1:{}/proxy?url={}",
+        state.proxy_port,
+        urlencoding::encode(&url)
+    )
 }
 
 #[tauri::command]
@@ -69,14 +73,19 @@ pub async fn play(
                         }
                     }
                     // Refresh OS metadata
-                    if let Some(ms) = app_clone.try_state::<crate::services::media::MediaSession>() {
+                    if let Some(ms) = app_clone.try_state::<crate::services::media::MediaSession>()
+                    {
                         if let Some(app_state) = app_clone.try_state::<AppState>() {
                             if let Ok(ps) = app_state.inner.lock() {
-                                 let artist = ps.station_name.as_deref().unwrap_or("Radiko Desktop");
-                                let title_opt = ps.stream_metadata.as_ref().and_then(|m| m.title.clone());
+                                let artist = ps.station_name.as_deref().unwrap_or("Radiko Desktop");
+                                let title_opt =
+                                    ps.stream_metadata.as_ref().and_then(|m| m.title.clone());
                                 let title = title_opt.as_deref().unwrap_or(artist);
                                 let cover_url = ps.station_image.as_deref();
-                                info!("download_cover: re-setting metadata with cover={:?}", cover_url);
+                                info!(
+                                    "download_cover: re-setting metadata with cover={:?}",
+                                    cover_url
+                                );
                                 ms.set_metadata(title, artist, cover_url);
                             }
                         }
@@ -167,14 +176,14 @@ pub async fn preview_play(
     let volume = state.inner.lock().unwrap().volume;
     // Preview uses 60% of current volume to be subtle
     let preview_volume = (volume * 0.6).powi(2);
-    
+
     match player::start(url, preview_volume, app, false).await {
         Ok(handle) => {
             let mut ps = state.inner.lock().unwrap();
             ps.preview_handle = Some(handle);
             Ok(())
         }
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
@@ -249,6 +258,8 @@ pub async fn set_volume(
         settings.last_url = current_url;
         let _ = settings.save(&dir);
     }
+    
+    let _ = app.emit("volume-changed", volume);
 
     Ok(())
 }
@@ -261,6 +272,8 @@ pub async fn get_status(state: State<'_, AppState>) -> Result<StatusResponse, Ap
         url: ps.current_url.clone(),
         volume: ps.volume,
         metadata: ps.stream_metadata.clone(),
+        station_name: ps.station_name.clone(),
+        station_image: ps.station_image.clone(),
     })
 }
 
@@ -270,8 +283,15 @@ pub async fn get_status(state: State<'_, AppState>) -> Result<StatusResponse, Ap
 pub async fn re_enrich(app: AppHandle, state: State<'_, AppState>) -> Result<(), AppError> {
     let (title, station_name) = {
         let ps = state.inner.lock().unwrap();
-        let t = ps.stream_metadata.as_ref().and_then(|m| m.title.clone()).unwrap_or_default();
-        let s = ps.station_name.clone().unwrap_or_else(|| "Unknown".to_string());
+        let t = ps
+            .stream_metadata
+            .as_ref()
+            .and_then(|m| m.title.clone())
+            .unwrap_or_default();
+        let s = ps
+            .station_name
+            .clone()
+            .unwrap_or_else(|| "Unknown".to_string());
         (t, s)
     };
     if !title.is_empty() {

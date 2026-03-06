@@ -86,7 +86,10 @@ impl MediaSession {
     }
 
     pub fn set_metadata(&self, title: &str, artist: &str, cover_url: Option<&str>) {
-        info!("SMTC set_metadata: title='{}', artist='{}', cover={:?}", title, artist, cover_url);
+        info!(
+            "SMTC set_metadata: title='{}', artist='{}', cover={:?}",
+            title, artist, cover_url
+        );
         if let Ok(ref mut c) = self.controls.lock() {
             // souvlaki on Windows expects file://C:\path (strips "file://" prefix for GetFileFromPathAsync)
             // Our URLs use file:///C:/path, so convert for SMTC
@@ -116,9 +119,12 @@ impl MediaSession {
             match c.set_metadata(metadata) {
                 Ok(()) => {
                     info!("SMTC metadata set successfully");
-                },
+                }
                 Err(e) => {
-                    warn!("SMTC set_metadata failed with cover: {:?}, retrying without cover", e);
+                    warn!(
+                        "SMTC set_metadata failed with cover: {:?}, retrying without cover",
+                        e
+                    );
                     let metadata_no_cover = MediaMetadata {
                         title: Some(title),
                         artist: Some(artist),

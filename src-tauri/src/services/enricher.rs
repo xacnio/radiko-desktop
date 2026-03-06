@@ -1,6 +1,6 @@
-use tauri::{AppHandle, Emitter, Manager};
-use tracing::{info, debug, error};
 use serde_json::Value;
+use tauri::{AppHandle, Emitter, Manager};
+use tracing::{debug, error, info};
 
 pub async fn enrich_metadata_background(app: AppHandle, title: String, station_name: String) {
     if title.trim().is_empty() {
@@ -11,16 +11,14 @@ pub async fn enrich_metadata_background(app: AppHandle, title: String, station_n
 
     if title.contains(" - ") {
         let client = reqwest::Client::new();
-        let query = [
-            ("term", title.as_str()),
-            ("limit", "1"),
-            ("media", "music")
-        ];
+        let query = [("term", title.as_str()), ("limit", "1"), ("media", "music")];
 
-        match client.get("https://itunes.apple.com/search")
+        match client
+            .get("https://itunes.apple.com/search")
             .query(&query)
             .send()
-            .await {
+            .await
+        {
             Ok(resp) => {
                 if let Ok(json) = resp.json::<Value>().await {
                     if let Some(result) = json["results"].as_array().and_then(|a| a.first()) {
@@ -55,45 +53,64 @@ pub async fn enrich_metadata_background(app: AppHandle, title: String, station_n
                         let app_handle_clone = app.clone();
                         let history_entry = enriched_result.clone();
                         tokio::spawn(async move {
-                            let data_dir = app_handle_clone.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                            let data_dir = app_handle_clone
+                                .path()
+                                .app_data_dir()
+                                .unwrap_or_else(|_| std::path::PathBuf::from("."));
                             let history_path = data_dir.join("identified_songs.json");
-                            
+
                             // Load current history
-                            let mut history: Vec<Value> = if let Ok(content) = std::fs::read_to_string(&history_path) {
-                                serde_json::from_str(&content).unwrap_or_default()
-                            } else {
-                                Vec::new()
-                            };
+                            let mut history: Vec<Value> =
+                                if let Ok(content) = std::fs::read_to_string(&history_path) {
+                                    serde_json::from_str(&content).unwrap_or_default()
+                                } else {
+                                    Vec::new()
+                                };
 
                             let current_source_name = "iTunes";
-                            let current_link = history_entry["song_link"].as_str().unwrap_or("").to_string();
+                            let current_link = history_entry["song_link"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string();
 
                             // Advanced Merging Logic
                             let mut was_saved = false;
                             if let Some(last_song) = history.get_mut(0) {
-                                if last_song["artist"] == history_entry["artist"] && last_song["title"] == history_entry["title"] {
+                                if last_song["artist"] == history_entry["artist"]
+                                    && last_song["title"] == history_entry["title"]
+                                {
                                     // Merge if possible
                                     if let Some(sources) = last_song["sources"].as_array_mut() {
-                                        let has_source = sources.iter().any(|s| s["name"] == current_source_name);
+                                        let has_source = sources
+                                            .iter()
+                                            .any(|s| s["name"] == current_source_name);
                                         if !has_source {
                                             sources.push(serde_json::json!({ "name": current_source_name, "link": current_link }));
-                                            
+
                                             // Update display strings
-                                            let old_src = last_song["source"].as_str().unwrap_or("");
+                                            let old_src =
+                                                last_song["source"].as_str().unwrap_or("");
                                             if !old_src.contains(current_source_name) {
-                                                last_song["source"] = serde_json::Value::String(format!("{} + {}", old_src, current_source_name));
+                                                last_song["source"] =
+                                                    serde_json::Value::String(format!(
+                                                        "{} + {}",
+                                                        old_src, current_source_name
+                                                    ));
                                             }
                                             was_saved = true;
                                         }
                                     } else {
                                         // Legacy entry
-                                        let old_src = last_song["source"].as_str().unwrap_or("").to_string();
+                                        let old_src =
+                                            last_song["source"].as_str().unwrap_or("").to_string();
                                         if old_src != current_source_name {
                                             last_song["sources"] = serde_json::json!([
                                                 { "name": old_src.clone(), "link": last_song["song_link"].as_str().unwrap_or("") },
                                                 { "name": current_source_name, "link": current_link }
                                             ]);
-                                            last_song["source"] = serde_json::Value::String(format!("{} + {}", old_src, current_source_name));
+                                            last_song["source"] = serde_json::Value::String(
+                                                format!("{} + {}", old_src, current_source_name),
+                                            );
                                             was_saved = true;
                                         }
                                     }
@@ -103,9 +120,12 @@ pub async fn enrich_metadata_background(app: AppHandle, title: String, station_n
                             if !was_saved {
                                 // Check dedupe in top 10
                                 let exists = history.iter().take(10).any(|item| {
-                                    item["artist"] == history_entry["artist"] && 
-                                    item["title"] == history_entry["title"] &&
-                                    item["source"].as_str().unwrap_or("").contains(current_source_name)
+                                    item["artist"] == history_entry["artist"]
+                                        && item["title"] == history_entry["title"]
+                                        && item["source"]
+                                            .as_str()
+                                            .unwrap_or("")
+                                            .contains(current_source_name)
                                 });
 
                                 if !exists {

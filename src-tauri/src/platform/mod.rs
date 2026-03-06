@@ -3,8 +3,11 @@
 //! Groups OS-specific modules (splash screen, taskbar thumbnails, shortcuts)
 //! that would otherwise clutter the crate root.
 
-pub mod splash;
 pub mod shortcut;
+pub mod splash;
 
 #[cfg(target_os = "windows")]
 pub mod thumbbar;
+
+#[cfg(target_os = "windows")]
+pub mod mouse_hook;

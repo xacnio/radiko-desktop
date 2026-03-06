@@ -55,7 +55,12 @@ impl PlayerHandle {
 ///
 /// Pipeline:
 ///   [async task: HTTP + ICY] --channel--> [std thread: symphonia + rodio]
-pub async fn start(url: String, volume: f32, app_handle: AppHandle, emit_events: bool) -> Result<PlayerHandle, AppError> {
+pub async fn start(
+    url: String,
+    volume: f32,
+    app_handle: AppHandle,
+    emit_events: bool,
+) -> Result<PlayerHandle, AppError> {
     let shutdown = Arc::new(AtomicBool::new(false));
 
     // Bounded channel: audio bytes from stream task → decode thread
@@ -113,7 +118,14 @@ pub async fn start(url: String, volume: f32, app_handle: AppHandle, emit_events:
     let url_clone = url.clone();
 
     let stream_task = tokio::spawn(async move {
-        run_stream_with_reconnect(url_clone, audio_tx, shutdown_stream, app_handle_stream, emit_events).await;
+        run_stream_with_reconnect(
+            url_clone,
+            audio_tx,
+            shutdown_stream,
+            app_handle_stream,
+            emit_events,
+        )
+        .await;
     });
 
     if emit_events {
