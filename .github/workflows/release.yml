@@ -2,6 +2,12 @@ name: 'Build & Release'
 
 on:
   workflow_dispatch:
+    inputs:
+      make_release:
+        description: 'Create a GitHub Release?'
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -14,6 +20,7 @@ jobs:
     outputs:
       is_new_version: ${{ steps.check.outputs.is_new }}
       new_tag: ${{ steps.check.outputs.tag }}
+      should_release: ${{ steps.check.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,11 +33,18 @@ jobs:
           TAG="v$VERSION"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "is_new=false" >> $GITHUB_OUTPUT
+            echo "should_release=false" >> $GITHUB_OUTPUT
             echo "Version $VERSION already tagged. Skipping release steps."
           else
             echo "is_new=true" >> $GITHUB_OUTPUT
             echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "New version $VERSION detected. Release will be created."
+            if [ "${{ github.event.inputs.make_release }}" == "true" ]; then
+              echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "New version $VERSION detected and release requested."
+            else
+              echo "should_release=false" >> $GITHUB_OUTPUT
+              echo "New version $VERSION detected but artifact-only mode active."
+            fi
           fi
 
   # ── Step 1: Build frontend once ──────────────────────────────────
@@ -173,11 +187,25 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          includeRelease: ${{ needs.check-version.outputs.is_new_version == 'true' }}
+          includeRelease: ${{ needs.check-version.outputs.should_release == 'true' }}
+
+      - name: Upload Artifacts (if not releasing)
+        if: needs.check-version.outputs.should_release != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: radiko-bins-${{ matrix.platform }}-${{ matrix.cache-key }}
+          path: |
+            src-tauri/target/${{ matrix.rust-targets }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.rust-targets }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ matrix.rust-targets }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.rust-targets }}/release/bundle/deb/*.deb
+            src-tauri/target/${{ matrix.rust-targets }}/release/bundle/rpm/*.rpm
+            src-tauri/target/${{ matrix.rust-targets }}/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn
 
   # ── Step 3: Finalize ─────────────────────────────────────────────
   finalize-release:
-    if: needs.check-version.outputs.is_new_version == 'true'
+    if: needs.check-version.outputs.should_release == 'true'
     needs: [check-version, build-tauri]
     runs-on: ubuntu-latest
     permissions:
