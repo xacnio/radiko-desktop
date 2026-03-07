@@ -34,7 +34,6 @@ jobs:
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "is_new=false" >> $GITHUB_OUTPUT
             echo "should_release=false" >> $GITHUB_OUTPUT
-            echo "Version $VERSION already tagged. Skipping release steps."
             # Append short sha to ensure tauri-action still generates artifacts
             SHA_SHORT=$(git rev-parse --short HEAD)
             echo "tag=${TAG}-dev-${SHA_SHORT}" >> $GITHUB_OUTPUT
