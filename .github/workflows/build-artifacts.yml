@@ -167,7 +167,7 @@ jobs:
 
       - name: Build Tauri App
         if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
