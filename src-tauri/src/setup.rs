@@ -325,8 +325,10 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {
+                        if window.is_minimized().unwrap_or(false) {
+                            let _ = window.unminimize();
+                        }
                         let _ = window.show();
-                        let _ = window.unminimize();
                         let _ = window.set_focus();
                     }
                 }
@@ -409,11 +411,16 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                         ..
                     } => {
                         if let Some(main) = tray.app_handle().get_webview_window("main") {
-                            if main.is_visible().unwrap_or(false) {
+                            let is_visible = main.is_visible().unwrap_or(false);
+                            let is_minimized = main.is_minimized().unwrap_or(false);
+                            
+                            if is_visible && !is_minimized {
                                 let _ = main.hide();
                             } else {
+                                if is_minimized {
+                                    let _ = main.unminimize();
+                                }
                                 let _ = main.show();
-                                let _ = main.unminimize();
                                 let _ = main.set_focus();
                             }
                         }
