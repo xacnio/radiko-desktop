@@ -1687,7 +1687,24 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                                     radio-browser.info • <span className="text-accent/70 group-hover:text-accent/90">{t('app.thirdPartyApi')}</span>
                                 </span>
                             </button>
-                            <button className="bg-bg-surface hover:bg-accent/10 text-text-primary hover:text-accent transition-colors border border-border rounded-lg py-4 flex flex-col items-center justify-center gap-2 group" onClick={() => { setShowAddChoiceModal(false); invoke('open_radio_browser').catch(console.error); }}>
+                            <button className="bg-bg-surface hover:bg-accent/10 text-text-primary hover:text-accent transition-colors border border-border rounded-lg py-4 flex flex-col items-center justify-center gap-2 group" onClick={() => { 
+                                setShowAddChoiceModal(false); 
+                                invoke('open_radio_browser').catch(err => {
+                                    if (err && err.toString().includes('LINUX_NOT_SUPPORTED_YET')) {
+                                        setConfirmDialog({
+                                            isOpen: true,
+                                            title: 'Linux Compatibility',
+                                            message: 'The Radio Browser feature is unavailable on Linux for now.',
+                                            variant: 'warning',
+                                            confirmText: 'Got it',
+                                            showCancel: false,
+                                            onConfirm: () => {}
+                                        });
+                                    } else {
+                                        console.error('Browser open failed:', err);
+                                    }
+                                }); 
+                            }}>
                                 <Search size={28} className="group-hover:scale-110 transition-transform" />
                                 <span className="font-bold">{t('app.addBrowser')}</span>
                                 <span className="text-xs text-text-muted group-hover:text-accent/80">{t('app.addBrowserDesc')}</span>

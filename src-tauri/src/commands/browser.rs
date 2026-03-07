@@ -352,6 +352,11 @@ pub fn close_browser_window(app: tauri::AppHandle) {
 pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     use tauri::{Manager, WebviewBuilder, WebviewUrl, WindowBuilder};
 
+    #[cfg(target_os = "linux")]
+    {
+        return Err(AppError::Settings("LINUX_NOT_SUPPORTED_YET".to_string()));
+    }
+
     // Check if the window is already open
     if let Some(win) = app.get_window("radio-browser-window") {
         let _ = win.set_focus();
