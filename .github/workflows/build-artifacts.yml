@@ -19,29 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Step 0: Check if we should release ───────────────────────────
-  check-version:
-    runs-on: ubuntu-latest
-    outputs:
-      is_new_version: ${{ steps.check.outputs.is_new }}
-      new_tag: ${{ steps.check.outputs.tag }}
-      should_release: ${{ steps.check.outputs.should_release }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check version
-        id: check
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          SHA_SHORT=$(git rev-parse --short HEAD)
-          TAG="v${VERSION}-dev-${SHA_SHORT}"
-          
-          echo "is_new=true" >> $GITHUB_OUTPUT
-          echo "should_release=false" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
   # ── Step 1: Build frontend once ──────────────────────────────────
   build-frontend:
     runs-on: ubuntu-latest
@@ -71,7 +48,7 @@ jobs:
 
   # ── Step 2: Build native binaries ───────────────────────────────
   build-tauri:
-    needs: [check-version, build-frontend]
+    needs: [build-frontend]
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write
@@ -188,7 +165,7 @@ jobs:
         if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
         run: node -e "const f='src-tauri/tauri.conf.json';const j=JSON.parse(require('fs').readFileSync(f,'utf8'));j.build.beforeBuildCommand='';require('fs').writeFileSync(f,JSON.stringify(j,null,4))"
 
-      - name: Build and Release
+      - name: Build Tauri App
         if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
         uses: tauri-apps/tauri-action@v0
         env:
@@ -196,15 +173,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ needs.check-version.outputs.new_tag }}
-          releaseName: "Radiko Desktop ${{ needs.check-version.outputs.new_tag }}"
-          releaseDraft: false
-          prerelease: false
+          includeRelease: false
           args: ${{ matrix.args }}
-          includeRelease: ${{ needs.check-version.outputs.should_release == 'true' }}
 
-      - name: Upload Artifacts (if not releasing)
-        if: ${{ needs.check-version.outputs.should_release != 'true' && (github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target) }}
+      - name: Upload Artifacts
+        if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
         uses: actions/upload-artifact@v4
         with:
           name: radiko-bins-${{ matrix.platform }}-${{ matrix.cache-key }}
