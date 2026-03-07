@@ -176,8 +176,13 @@ jobs:
           args: ${{ matrix.args }}
 
       - name: List build output
-        if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
+        if: ${{ (github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target) && runner.os != 'Windows' }}
         run: find src-tauri/target -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) 2>/dev/null || true
+
+      - name: List build output (Windows)
+        if: ${{ (github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target) && runner.os == 'Windows' }}
+        run: Get-ChildItem -Path src-tauri/target -Recurse -File -Include *.msi, *.exe | Select-Object -ExpandProperty FullName
+        shell: powershell
 
       - name: Upload Artifacts
         if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
