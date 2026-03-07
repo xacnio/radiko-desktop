@@ -17,15 +17,18 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(default)]
     pub theme: Option<String>,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub minimize_to_tray: bool,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub close_to_tray: bool,
+    #[serde(default)]
+    pub output_device: Option<String>,
+    #[serde(default = "default_skip_ads")]
+    pub skip_ads: bool,
 }
 
-fn default_true() -> bool {
-    true
-}
+fn default_skip_ads() -> bool { true }
+
 
 impl Default for Settings {
     fn default() -> Self {
@@ -37,7 +40,9 @@ impl Default for Settings {
             language: None,
             theme: None,
             minimize_to_tray: true,
-            close_to_tray: true,
+            close_to_tray: false,
+            output_device: None,
+            skip_ads: true,
         }
     }
 }

@@ -59,12 +59,13 @@ pub fn emit_status(app: &AppHandle, status: PlaybackStatus) {
                 crate::platform::thumbbar::set_playing(false);
             }
             PlaybackStatus::Connecting => {
-                // Immediately show new station as paused so old one doesn't linger
-                ms.set_paused();
+                // Treat connecting as playing from OS perspective to avoid "pause" lag while buffering
+                ms.set_playing();
+                // SET METADATA IMMEDIATELY so the radio switch is instant in the OS panel
                 if let Some(state) = app.try_state::<crate::state::AppState>() {
                     if let Ok(ps) = state.inner.lock() {
                         let artist = ps.station_name.as_deref().unwrap_or("Radiko");
-                        let cover = ps.default_cover.as_deref();
+                        let cover = ps.station_image.as_deref().or(ps.default_cover.as_deref());
                         ms.set_metadata(artist, artist, cover);
                     }
                 }
@@ -108,44 +109,35 @@ pub fn emit_metadata(app: &AppHandle, metadata: StreamMetadata) {
         });
     }
 
-    // Update OS media transport
+    // Update OS media transport with raw metadata
     if let Some(ms) = app.try_state::<MediaSession>() {
-        let mut artist = "Radiko".to_string();
+        let mut station_name = "Radiko".to_string();
         let mut cover_url = None;
+        
         if let Some(state) = app.try_state::<crate::state::AppState>() {
             if let Ok(mut ps) = state.inner.lock() {
                 ps.stream_metadata = Some(metadata.clone());
                 if let Some(ref s) = ps.station_name {
-                    artist = s.clone();
+                    station_name = s.clone();
                 }
+                
+                // Use station favicon or default cover (not iTunes enriched cover for MPRIS)
                 if let Some(ref c) = ps.station_image {
                     if c.starts_with("file:///") {
                         cover_url = Some(c.clone());
                     }
                 }
-                // Fallback to default cover
                 if cover_url.is_none() {
-                    if let Some(ref dc) = ps.default_cover {
-                        cover_url = Some(dc.clone());
-                    }
+                    cover_url = ps.default_cover.clone();
                 }
             }
         }
 
-        let title = metadata.title.as_deref().unwrap_or(&artist);
-        ms.set_metadata(title, &artist, cover_url.as_deref());
-
-        // Refresh playback status so OS UI buttons stay enabled/synced
-        if let Some(state) = app.try_state::<crate::state::AppState>() {
-            if let Ok(ps) = state.inner.lock() {
-                match ps.status {
-                    PlaybackStatus::Playing => ms.set_playing(),
-                    PlaybackStatus::Paused => ms.set_paused(),
-                    PlaybackStatus::Stopped => ms.set_stopped(),
-                    _ => {}
-                }
-            }
-        }
+        let title = metadata.title.as_deref().unwrap_or(&station_name);
+        ms.set_metadata(title, &station_name, cover_url.as_deref());
+        
+        // Ensure status is synced
+        ms.set_playing();
     }
 }
 

@@ -11,19 +11,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tracing::{debug, info};
 
 use crate::events;
-use crate::player::types::StreamMetadata;
+use crate::player::types::{PlayerMessage, StreamMetadata};
 
 /// Configuration for a single stream connection attempt.
 pub struct StreamConfig {
     pub url: String,
-    pub audio_tx: SyncSender<Bytes>,
+    pub original_url: String,
+    pub audio_tx: SyncSender<PlayerMessage>,
     pub shutdown: Arc<AtomicBool>,
     pub app_handle: AppHandle,
     pub emit_events: bool,
+    pub skip_ads: bool,
 }
 
 /// Opens an HTTP connection and streams audio bytes to `audio_tx`.
@@ -40,11 +42,14 @@ pub async fn run_stream(config: &StreamConfig) -> Result<(), String> {
 /// HLS (m3u8) live stream: fetch manifest → download segments → feed audio.
 async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
     let client = Client::new();
-
-    info!("Connecting to HLS stream: {}", config.url);
+    // Use a common browser user-agent to look more 'legit' to some CDNs
+    let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 
     // Resolve master playlist first if needed
     let mut stream_url = config.url.clone();
+
+    // Experimental: If URL contains known ad-session parameters, maybe try stripping them if manifest fails?
+    // For now we use it as-is.
 
     // Derive base URL
     let mut base_url = stream_url.clone();
@@ -55,7 +60,7 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
     // Check if this is a master playlist
     let manifest_bytes = client
         .get(&stream_url)
-        .header("User-Agent", "Radiko/1.0")
+        .header("User-Agent", user_agent)
         .send()
         .await
         .map_err(|e| format!("HLS manifest fetch failed: {}", e))?
@@ -86,6 +91,12 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
             stream_url
         );
 
+        // Update session cache so we skip the master playlist/ads next time
+        if let Some(state) = config.app_handle.try_state::<crate::state::AppState>() {
+            let mut cache = state.hls_session_cache.lock().unwrap();
+            cache.insert(config.original_url.clone(), stream_url.clone());
+        }
+
         // Update base URL for the variant
         base_url = stream_url.clone();
         if let Some(pos) = base_url.rfind('/') {
@@ -95,6 +106,7 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
 
     let mut seen_segments: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut last_title: Option<String> = None;
+    let mut was_ad_only_mode = false;
 
     loop {
         if config.shutdown.load(Ordering::Relaxed) {
@@ -104,7 +116,7 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
         // Fetch the media playlist
         let manifest_bytes = client
             .get(&stream_url)
-            .header("User-Agent", "Radiko/1.0")
+            .header("User-Agent", user_agent)
             .send()
             .await
             .map_err(|e| format!("HLS manifest fetch failed: {}", e))?
@@ -119,8 +131,15 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
         let mut target_duration: f64 = 6.0;
 
         let mut current_title: Option<String> = None;
+        let mut is_ad_segment = false;
 
         for line in &lines {
+            // Match 'adwData' or common ad patterns like '/ad_' in URLs or tags
+            let line_low = line.to_lowercase();
+            if line_low.contains("adwdata") || line_low.contains("/ad_") {
+                is_ad_segment = true;
+            }
+
             if line.starts_with("#EXT-X-TARGETDURATION:") {
                 if let Ok(d) = line
                     .trim_start_matches("#EXT-X-TARGETDURATION:")
@@ -141,17 +160,62 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
                 } else {
                     format!("{}{}", base_url, line)
                 };
-                segments.push((seg_url, current_title.take()));
+                
+                // Final check: adwData or /ad_ in segment URL itself
+                let url_low = seg_url.to_lowercase();
+                if url_low.contains("adwdata") || url_low.contains("/ad_") {
+                    is_ad_segment = true;
+                }
+
+                segments.push((seg_url, current_title.take(), is_ad_segment));
+                is_ad_segment = false;
             }
         }
 
         let is_live = !lines.iter().any(|l| l.contains("#EXT-X-ENDLIST"));
 
+        // Check if we have at least one real (non-ad) segment in this manifest
+        let ad_segments: Vec<_> = segments.iter().filter(|(_, _, is_ad)| *is_ad).collect();
+        let real_segments: Vec<_> = segments.iter().filter(|(_, _, is_ad)| !*is_ad).collect();
+        let has_real_content = !real_segments.is_empty();
+
+        if !segments.is_empty() {
+            info!(
+                "HLS manifest: {} real segments, {} ad segments found. Mode: {}", 
+                real_segments.len(), 
+                ad_segments.len(),
+                if has_real_content { "RADIO (skipping ads)" } else { "AD-ONLY (playing ads)" }
+            );
+        }
+
+        // IMPROVEMENT: If we were playing ads and now we found radio content,
+        // we should favor the new radio content as much as possible.
+        if has_real_content && was_ad_only_mode {
+            info!("HLS Transition: RADIO content found after AD phase. Clearing seen_segments and FLUSHING buffer.");
+            // We clear seen segments here to make sure we catch the very first radio segment
+            // even if it appeared in a previous manifest during the wait.
+            seen_segments.clear(); 
+            let _ = config.audio_tx.send(PlayerMessage::Flush);
+        }
+        was_ad_only_mode = !has_real_content;
+
         // Download new segments
+        let mut audio_sent_any = false;
         let mut downloaded_any = false;
-        for (seg_url, seg_title) in segments {
+
+        // Iterate through segments: skip ads only if we have real material to switch to.
+        for (seg_url, seg_title, is_ad) in segments {
             if config.shutdown.load(Ordering::Relaxed) {
                 return Ok(());
+            }
+
+            // Skip ads if enabled and real content is available in this manifest
+            if config.skip_ads && is_ad && has_real_content {
+                if !seen_segments.contains(&seg_url) {
+                    info!("HLS: skipping ad segment (real content found): {}", seg_url);
+                    seen_segments.insert(seg_url.clone());
+                }
+                continue;
             }
 
             if seen_segments.contains(&seg_url) {
@@ -159,6 +223,11 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
             }
             seen_segments.insert(seg_url.clone());
             downloaded_any = true;
+
+            // Memory limit for seen segments (prevent leak)
+            if seen_segments.len() > 1000 {
+                seen_segments.clear();
+            }
 
             // Emit metadata if changed
             if let Some(title) = seg_title {
@@ -183,7 +252,7 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
 
             match client
                 .get(&seg_url)
-                .header("User-Agent", "Radiko/1.0")
+                .header("User-Agent", user_agent)
                 .send()
                 .await
             {
@@ -196,10 +265,11 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
                                     return Ok(());
                                 }
                                 let audio = extract_audio_from_segment(&seg_data);
-                                if !audio.is_empty()
-                                    && config.audio_tx.send(Bytes::from(audio)).is_err()
-                                {
-                                    return Ok(());
+                                if !audio.is_empty() {
+                                    if config.audio_tx.send(PlayerMessage::Audio(Bytes::from(audio))).is_err() {
+                                        return Ok(());
+                                    }
+                                    audio_sent_any = true;
                                 }
                             }
                             Err(e) => {
@@ -223,10 +293,12 @@ async fn run_hls_stream(config: &StreamConfig) -> Result<(), String> {
         }
 
         // Live stream: wait before refetching manifest
-        let wait = if downloaded_any {
+        let wait = if audio_sent_any {
             Duration::from_secs_f64(target_duration * 0.8)
         } else {
-            Duration::from_secs(1)
+            // No real audio was sent (all segments were ads or previously seen)
+            // Retry very quickly during the initial "ad-only" or "empty" phase
+            Duration::from_millis(500)
         };
         tokio::time::sleep(wait).await;
     }
@@ -560,23 +632,12 @@ async fn run_icy_stream(config: &StreamConfig) -> Result<(), String> {
     }
 
     let mut byte_stream = response.bytes_stream();
-    let mut icy_parser = IcyParser::new(metaint);
+    let mut icy_parser = IcyParser::new(metaint, config.audio_tx.clone(), config.skip_ads);
 
     while !config.shutdown.load(Ordering::Relaxed) {
         match byte_stream.next().await {
             Some(Ok(chunk)) => {
-                let (audio_chunks, new_title) = icy_parser.process(&chunk);
-
-                for audio in audio_chunks {
-                    if config.shutdown.load(Ordering::Relaxed) {
-                        return Ok(());
-                    }
-                    // send() blocks if channel is full (backpressure)
-                    if config.audio_tx.send(audio).is_err() {
-                        // Receiver dropped — decode thread exited
-                        return Ok(());
-                    }
-                }
+                let new_title = icy_parser.process(&chunk)?;
 
                 if let Some(title) = new_title {
                     if config.emit_events {
@@ -621,10 +682,13 @@ struct IcyParser {
     meta_remaining: usize,
     in_metadata: bool,
     last_title: Option<String>,
+    skip_audio: bool,
+    skip_ads_config: bool,
+    audio_tx: SyncSender<PlayerMessage>,
 }
 
 impl IcyParser {
-    fn new(metaint: Option<usize>) -> Self {
+    fn new(metaint: Option<usize>, audio_tx: SyncSender<PlayerMessage>, skip_ads_config: bool) -> Self {
         Self {
             metaint,
             bytes_until_meta: metaint.unwrap_or(0),
@@ -632,21 +696,28 @@ impl IcyParser {
             meta_remaining: 0,
             in_metadata: false,
             last_title: None,
+            skip_audio: false,
+            skip_ads_config,
+            audio_tx,
         }
     }
 
     /// Process a raw chunk from the HTTP response.
-    /// Returns (audio_data_chunks, optional_new_title).
-    fn process(&mut self, chunk: &[u8]) -> (Vec<Bytes>, Option<String>) {
+    /// Returns optional_new_title.
+    fn process(&mut self, chunk: &[u8]) -> Result<Option<String>, String> {
         let metaint = match self.metaint {
             Some(m) => m,
             None => {
                 // No ICY metadata — entire chunk is audio
-                return (vec![Bytes::copy_from_slice(chunk)], None);
+                if !self.skip_audio && !chunk.is_empty() {
+                    if self.audio_tx.send(PlayerMessage::Audio(Bytes::copy_from_slice(chunk))).is_err() {
+                        return Err("audio_tx send failed".into());
+                    }
+                }
+                return Ok(None);
             }
         };
 
-        let mut audio_chunks = Vec::new();
         let mut new_title = None;
         let mut pos = 0;
 
@@ -661,12 +732,19 @@ impl IcyParser {
                     self.in_metadata = false;
                     self.bytes_until_meta = metaint;
 
+                    let metadata_text = decode_icy_text(&self.meta_buf);
+                    self.skip_audio = self.skip_ads_config && metadata_text.contains("adwData");
+                    
                     if let Some(title) = parse_icy_title(&self.meta_buf) {
-                        if self.last_title.as_deref() != Some(&title) {
+                        if self.skip_audio {
+                            info!("ICY: adwData detected in metadata, skipping audio: {}", title);
+                        } else if self.last_title.as_deref() != Some(&title) {
                             debug!("ICY title changed: {}", title);
                             self.last_title = Some(title.clone());
                             new_title = Some(title);
                         }
+                    } else if self.skip_audio {
+                        info!("ICY: adwData detected in raw metadata string, skipping audio");
                     }
                     self.meta_buf.clear();
                 }
@@ -685,13 +763,20 @@ impl IcyParser {
             } else {
                 // Read audio bytes
                 let to_read = std::cmp::min(self.bytes_until_meta, chunk.len() - pos);
-                audio_chunks.push(Bytes::copy_from_slice(&chunk[pos..pos + to_read]));
+                if !self.skip_audio {
+                    let audio_chunk = Bytes::copy_from_slice(&chunk[pos..pos + to_read]);
+                    if !audio_chunk.is_empty() {
+                        if self.audio_tx.send(PlayerMessage::Audio(audio_chunk)).is_err() {
+                            return Err("audio_tx send failed".into());
+                        }
+                    }
+                }
                 self.bytes_until_meta -= to_read;
                 pos += to_read;
             }
         }
 
-        (audio_chunks, new_title)
+        Ok(new_title)
     }
 }
 

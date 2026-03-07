@@ -6,8 +6,9 @@ use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::winuser::{
     CallNextHookEx, GetMessageW, SetWindowsHookExW, UnhookWindowsHookEx,
     WH_MOUSE_LL, WM_LBUTTONDOWN, WM_RBUTTONDOWN, WM_MBUTTONDOWN,
-    GetWindowRect, MSLLHOOKSTRUCT, WindowFromPoint
+    MSLLHOOKSTRUCT, WindowFromPoint, GetWindowRect, PostThreadMessageW, WM_QUIT
 };
+use winapi::um::processthreadsapi::GetCurrentThreadId;
 use once_cell::sync::Lazy;
 
 use std::sync::atomic::AtomicU64;
@@ -15,6 +16,7 @@ use std::sync::atomic::AtomicU64;
 pub static LAST_HIDE_TIME: AtomicU64 = AtomicU64::new(0);
 
 static HOOK_HANDLE: AtomicIsize = AtomicIsize::new(0);
+static HOOK_THREAD_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
 static IS_HOOKED: AtomicBool = AtomicBool::new(false);
 static APP_HANDLE: Lazy<std::sync::Mutex<Option<AppHandle>>> = Lazy::new(|| std::sync::Mutex::new(None));
@@ -27,44 +29,39 @@ unsafe extern "system" fn mouse_proc(code: i32, w_param: WPARAM, l_param: LPARAM
             let hwnd = WindowFromPoint(hook_struct.pt);
             
             if !hwnd.is_null() {
-                if let Ok(mut handle) = APP_HANDLE.lock() {
-                    if let Some(app) = handle.as_ref() {
-                        if let Some(window) = app.get_webview_window("tray") {
-                            if window.is_visible().unwrap_or(false) {
-                                let mut inside = false;
-                                if let Ok(pos) = window.outer_position() {
-                                    if let Ok(size) = window.outer_size() {
-                                        let wx = pos.x as i32;
-                                        let wy = pos.y as i32;
-                                        let ww = size.width as i32;
-                                        let wh = size.height as i32;
-                                        let mx = hook_struct.pt.x;
-                                        let my = hook_struct.pt.y;
-                                        
-                                        if mx >= wx && mx <= (wx + ww) && my >= wy && my <= (wy + wh) {
-                                            inside = true;
+                let tray_hwnd = TRAY_HWND.load(Ordering::SeqCst);
+                if tray_hwnd != 0 {
+                    let mut rect: RECT = std::mem::zeroed();
+                    if unsafe { GetWindowRect(tray_hwnd as HWND, &mut rect) } != 0 {
+                        let mx = hook_struct.pt.x;
+                        let my = hook_struct.pt.y;
+                        
+                        let inside = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+                        
+                        if !inside {
+                            LAST_HIDE_TIME.store(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or(std::time::Duration::from_millis(0))
+                                    .as_millis() as u64,
+                                Ordering::SeqCst,
+                            );
+                            
+                            if let Ok(handle) = APP_HANDLE.lock() {
+                                if let Some(app) = handle.as_ref() {
+                                    let app_clone = app.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        if let Some(window) = app_clone.get_webview_window("tray") {
+                                            let _ = app_clone.emit("hide-tray", ());
+                                            let _ = window.hide();
                                         }
-                                    }
-                                }
-                                
-                                if !inside {
-                                    LAST_HIDE_TIME.store(
-                                        std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or(std::time::Duration::from_millis(0))
-                                            .as_millis() as u64,
-                                        Ordering::SeqCst,
-                                    );
-                                    let _ = app.emit("hide-tray", ());
-                                    let _ = window.hide();
-                                    tauri::async_runtime::spawn(async {
+                                        stop_mouse_hook();
+                                    });
+                                } else {
+                                    tauri::async_runtime::spawn(async move {
                                         stop_mouse_hook();
                                     });
                                 }
-                            } else {
-                                tauri::async_runtime::spawn(async {
-                                    stop_mouse_hook();
-                                });
                             }
                         }
                     }
@@ -95,6 +92,7 @@ pub fn start_mouse_hook(app: AppHandle, hwnd: isize) {
         if !hook.is_null() {
             HOOK_HANDLE.store(hook as isize, Ordering::SeqCst);
             IS_HOOKED.store(true, Ordering::SeqCst);
+            HOOK_THREAD_ID.store(GetCurrentThreadId(), Ordering::SeqCst);
             tracing::info!("Global mouse hook started successfully");
             
             let mut msg = std::mem::zeroed();
@@ -118,6 +116,13 @@ pub fn stop_mouse_hook() {
         UnhookWindowsHookEx(HOOK_HANDLE.load(Ordering::SeqCst) as HHOOK);
         HOOK_HANDLE.store(0, Ordering::SeqCst);
         IS_HOOKED.store(false, Ordering::SeqCst);
+        
+        let tid = HOOK_THREAD_ID.load(Ordering::SeqCst);
+        if tid != 0 {
+            PostThreadMessageW(tid, WM_QUIT, 0, 0);
+            HOOK_THREAD_ID.store(0, Ordering::SeqCst);
+        }
+        
         tracing::info!("Global mouse hook stopped");
     }
 }

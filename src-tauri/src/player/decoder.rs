@@ -8,7 +8,6 @@
 //! - ADTS sync (0xFFF, layer=00) with frame-chain validation → AAC path
 //! - Anything else → symphonia probe path
 
-use bytes::Bytes;
 use rodio::buffer::SamplesBuffer;
 use rodio::Sink;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -26,7 +25,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::events;
 use crate::player::eq::Equalizer;
-use crate::player::types::PlaybackStatus;
+use crate::player::types::{PlaybackStatus, PlayerMessage};
 
 /// AAC sample rate table (ISO 14496-3)
 const SAMPLE_RATES: [u32; 13] = [
@@ -34,7 +33,7 @@ const SAMPLE_RATES: [u32; 13] = [
 ];
 
 pub fn run_decode_loop(
-    audio_rx: Receiver<Bytes>,
+    audio_rx: Receiver<PlayerMessage>,
     sink: Arc<Sink>,
     shutdown: Arc<AtomicBool>,
     app_handle: AppHandle,
@@ -262,10 +261,19 @@ fn run_adts_decode(
             break;
         }
 
+        // Check for transition flush (RE-CHECK: Ensure we check at the START of the loop)
+        if reader.flush_requested() {
+            info!("ADTS Decoder: Transition detected! Flushing sink to skip buffered ads.");
+            sink.pause();
+            sink.clear();
+            sink.play();
+        }
+
         // Find ADTS sync word
         let mut sync = [0u8; 2];
-        if reader.read_exact(&mut sync).is_err() {
-            break;
+        match reader.read_exact(&mut sync) {
+            Ok(_) => {},
+            Err(_) => break, // EOF or Error
         }
 
         // Resync if needed
@@ -397,8 +405,9 @@ fn run_adts_decode(
                     let rate = spec.rate;
 
                     // 1. Wait for player capacity first.
-                    // Limit to 1 frame in sink to ensure near-zero latency.
-                    while sink.len() > 1 {
+                    // Keep a slightly larger buffer (8 frames, ~200ms) to prevent audio
+                    // underruns and stuttering on Linux ALSA/PulseAudio.
+                    while sink.len() > 8 {
                         std::thread::sleep(std::time::Duration::from_millis(1));
                         if shutdown.load(Ordering::Relaxed) {
                             break;
@@ -530,8 +539,9 @@ fn run_probe_decode(
                 sb.copy_interleaved_ref(decoded);
                 let mut samples = sb.samples().to_vec();
                 if !samples.is_empty() {
-                    // Wait for player capacity first.
-                    while sink.len() > 1 {
+                    // Wait for player capacity first, allowing ~8 frames of buffering
+                    // to prevent audio stuttering on Linux.
+                    while sink.len() > 8 {
                         std::thread::sleep(std::time::Duration::from_millis(1));
                         if shutdown.load(Ordering::Relaxed) {
                             break;
@@ -564,19 +574,21 @@ fn run_probe_decode(
 
 /// Bridges `mpsc::Receiver<Bytes>` → `Read + Seek + MediaSource` for symphonia.
 struct ChannelReader {
-    rx: Mutex<Receiver<Bytes>>,
+    rx: Mutex<Receiver<PlayerMessage>>,
     buffer: Vec<u8>,
     pos: usize,
     shutdown: Arc<AtomicBool>,
+    flush_requested: Arc<AtomicBool>,
 }
 
 impl ChannelReader {
-    fn new(rx: Receiver<Bytes>, shutdown: Arc<AtomicBool>) -> Self {
+    fn new(rx: Receiver<PlayerMessage>, shutdown: Arc<AtomicBool>) -> Self {
         Self {
             rx: Mutex::new(rx),
             buffer: Vec::new(),
             pos: 0,
             shutdown,
+            flush_requested: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -592,18 +604,32 @@ impl Read for ChannelReader {
         if self.shutdown.load(Ordering::Relaxed) {
             return Ok(0);
         }
-        let rx = self.rx.lock().unwrap();
-        match rx.recv() {
-            Ok(bytes) => {
-                drop(rx);
-                self.buffer = bytes.to_vec();
-                self.pos = 0;
-                let n = std::cmp::min(buf.len(), self.buffer.len());
-                buf[..n].copy_from_slice(&self.buffer[..n]);
-                self.pos = n;
-                Ok(n)
+
+        // Loop until we get audio or EOF, handling Flush internally
+        loop {
+            let rx = self.rx.lock().unwrap();
+            match rx.recv() {
+                Ok(msg) => {
+                    drop(rx);
+                    match msg {
+                        PlayerMessage::Audio(bytes) => {
+                            self.buffer = bytes.to_vec();
+                            self.pos = 0;
+                            let n = std::cmp::min(buf.len(), self.buffer.len());
+                            buf[..n].copy_from_slice(&self.buffer[..n]);
+                            self.pos = n;
+                            return Ok(n);
+                        }
+                        PlayerMessage::Flush => {
+                            info!("ChannelReader: FLUSH signal received, marking for decoder");
+                            self.flush_requested.store(true, Ordering::Relaxed);
+                            // Do NOT return here, continue loop to get actual audio data
+                            continue;
+                        }
+                    }
+                }
+                Err(_) => return Ok(0),
             }
-            Err(_) => Ok(0),
         }
     }
 }
@@ -638,6 +664,10 @@ impl PrefixedReader {
             prefix_pos: 0,
             inner,
         }
+    }
+
+    fn flush_requested(&mut self) -> bool {
+        self.inner.flush_requested.swap(false, Ordering::Relaxed)
     }
 }
 

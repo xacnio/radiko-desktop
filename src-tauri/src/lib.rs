@@ -52,7 +52,7 @@ pub fn run() {
             let proxy_state = proxy::start_proxy(app.handle().clone());
             let port = proxy_state.port;
 
-            let mut state = AppState::new(settings.volume, settings.last_url, settings.minimize_to_tray, settings.close_to_tray);
+            let mut state = AppState::new(settings.volume, settings.last_url, settings.minimize_to_tray, settings.close_to_tray, settings.output_device, settings.skip_ads);
             state.proxy_port = port;
             app.manage(state);
 
@@ -131,7 +131,8 @@ pub fn run() {
             commands::get_os,
             commands::minimize_browser_window,
             commands::maximize_browser_window,
-            commands::drag_browser_window,
+            commands::drag_window,
+            commands::start_window_resize,
             commands::send_radio_detect_sidebar,
             commands::probe_and_add_stream_from_js,
             commands::get_proxy_url,
@@ -145,6 +146,9 @@ pub fn run() {
             commands::save_language,
             commands::save_theme,
             commands::save_tray_settings,
+            commands::save_skip_ads,
+            commands::get_audio_devices,
+            commands::set_audio_device,
             commands::export_backup,
             commands::import_backup,
             commands::analyze_backup,

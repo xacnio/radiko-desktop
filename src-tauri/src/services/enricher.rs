@@ -49,6 +49,10 @@ pub async fn enrich_metadata_background(app: AppHandle, title: String, station_n
 
                         let _ = app.emit("metadata-enriched", enriched_result.clone());
 
+                        let _ = app.emit("metadata-enriched", enriched_result.clone());
+
+                        // Save to history automatically
+
                         // Save to history automatically
                         let app_handle_clone = app.clone();
                         let history_entry = enriched_result.clone();

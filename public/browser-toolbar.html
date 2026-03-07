@@ -11,6 +11,7 @@
             box-sizing: border-box;
             -webkit-user-select: none;
             user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
 
         html,
@@ -20,80 +21,38 @@
             background: var(--bg-primary, #111111);
         }
 
-        /* Drag region covering the entire top bar */
-        .drag-region {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 28px;
+        /* Drag region: now integrated better */
+        .header-content {
             display: flex;
-            align-items: center;
-            padding: 0 12px;
-            gap: 8px;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
         }
 
-        /* Mac OS Traffic Lights */
-        .mac-controls {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            -webkit-app-region: no-drag;
-            padding-top: 4px;
-        }
-
-        .mac-btn {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .mac-btn svg {
-            width: 8px;
-            height: 8px;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-
-        .mac-controls:hover .mac-btn svg {
-            opacity: 0.6;
-        }
-
-        .mac-close {
-            background: #ff5f56;
-            border: 1px solid #e0443e;
-        }
-
-        .mac-min {
-            background: #ffbd2e;
-            border: 1px solid #dea123;
-        }
-
-        .mac-max {
-            background: #27c93f;
-            border: 1px solid #1aab29;
+        .top-stripe {
+            height: 4px;
+            width: 100%;
+            -webkit-app-region: drag;
         }
 
         .bar {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 42px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 12px 0 12px;
+            border-bottom: 1px solid var(--border, #262626);
+            -webkit-app-region: drag;
+        }
+
+        .controls-group {
             display: flex;
             align-items: center;
             gap: 4px;
-            padding: 0 12px 6px 12px;
-            border-bottom: 1px solid var(--border, #262626);
+            -webkit-app-region: no-drag;
         }
 
         .btn {
-            -webkit-app-region: no-drag;
             width: 32px;
             height: 32px;
             border: none;
@@ -107,6 +66,7 @@
             font-size: 15px;
             transition: all 0.15s;
             flex-shrink: 0;
+            outline: none;
         }
 
         .btn:hover {
@@ -119,30 +79,37 @@
         }
 
         .btn svg {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             stroke: currentColor;
             fill: none;
-            stroke-width: 2.5;
+            stroke-width: 2.2;
             stroke-linecap: round;
             stroke-linejoin: round;
         }
 
-        .url {
-            -webkit-app-region: no-drag;
+        .url-container {
             flex: 1;
-            height: 32px;
+            display: flex;
+            justify-content: center;
+            -webkit-app-region: no-drag;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .url {
+            width: 100%;
+            height: 34px;
             background: var(--bg-surface, #222);
             border: 1px solid var(--border, #262626);
-            border-radius: 8px;
+            border-radius: 10px;
             color: var(--text-primary, #fff);
             font-size: 13px;
             padding: 0 12px;
             outline: none;
-            transition: border-color 0.2s;
+            transition: all 0.2s;
             -webkit-user-select: text;
             user-select: text;
-            min-width: 0;
             text-align: center;
         }
 
@@ -150,6 +117,44 @@
             border-color: var(--accent, #1DB954);
             background: var(--bg-primary, #111111);
             text-align: left;
+            box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
+        }
+
+        /* Window Controls (Close, Min, Max) */
+        .window-controls {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            -webkit-app-region: no-drag;
+            margin-left: 8px;
+        }
+
+        .win-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            color: var(--text-muted, #777);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .win-btn:hover {
+            background: var(--bg-surface-hover, #2a2a2a);
+            color: var(--text-primary, #fff);
+        }
+
+        .win-btn.close:hover {
+            background: #e81123 !important;
+            color: #fff !important;
+        }
+
+        .win-btn svg {
+            width: 14px;
+            height: 14px;
         }
 
         /* Loading Progress Bar */
@@ -162,6 +167,7 @@
             background: var(--accent, #1DB954);
             transition: width 0.3s, opacity 0.3s;
             opacity: 0;
+            z-index: 10;
         }
 
         body.is-loading #progress {
@@ -171,86 +177,115 @@
         }
 
         @keyframes loading-pulse {
-            0% {
-                opacity: 0.4;
-                width: 0%;
-            }
-
-            50% {
-                opacity: 1;
-                width: 70%;
-            }
-
-            100% {
-                opacity: 0.4;
-                width: 100%;
-            }
+            0% { opacity: 0.4; width: 0%; }
+            50% { opacity: 1; width: 70%; }
+            100% { opacity: 0.4; width: 100%; }
         }
 
-        /* Toggle Reload/Stop */
-        #reload-icon {
-            display: block;
+        /* Resize Handles */
+        .resize-edge {
+            position: absolute;
+            z-index: 9999;
+            -webkit-app-region: no-drag;
         }
+        .resize-edge.top { top: 0; left: 0; right: 0; height: 4px; cursor: ns-resize; }
+        .resize-edge.bottom { bottom: 0; left: 0; right: 0; height: 4px; cursor: ns-resize; }
+        .resize-edge.left { top: 0; bottom: 0; left: 0; width: 4px; cursor: ew-resize; }
+        .resize-edge.right { top: 0; bottom: 0; right: 0; width: 4px; cursor: ew-resize; }
+        
+        .resize-corner {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            z-index: 10000;
+            -webkit-app-region: no-drag;
+        }
+        .resize-corner.top-left { top: 0; left: 0; cursor: nwse-resize; }
+        .resize-corner.top-right { top: 0; right: 0; cursor: nesw-resize; }
+        .resize-corner.bottom-left { bottom: 0; left: 0; cursor: nesw-resize; }
+        .resize-corner.bottom-right { bottom: 0; right: 0; cursor: nwse-resize; }
 
-        #stop-icon {
-            display: none;
-        }
-
-        body.is-loading #reload-icon {
-            display: none;
-        }
-
-        body.is-loading #stop-icon {
-            display: block;
-        }
-
-        body.is-loading #reload {
-            color: #ef4444;
-            /* danger */
-        }
+        /* Icons/Toggles */
+        #stop-icon { display: none; }
+        body.is-loading #reload-icon { display: none; }
+        body.is-loading #stop-icon { display: block; }
+        body.is-loading #reload { color: #ef4444; }
     </style>
 </head>
 
 <body>
+    <!-- Resize Handles -->
+    <div class="resize-edge top" data-direction="top"></div>
+    <div class="resize-corner top-left" data-direction="top-left"></div>
+    <div class="resize-corner top-right" data-direction="top-right"></div>
+    <div class="resize-edge left" data-direction="left"></div>
+    <div class="resize-edge right" data-direction="right"></div>
+    <div class="resize-corner bottom-left" data-direction="bottom-left"></div>
+    <div class="resize-corner bottom-right" data-direction="bottom-right"></div>
+    <div class="resize-edge bottom" data-direction="bottom"></div>
 
-    <div class="drag-region" data-tauri-drag-region></div>
+    <div class="header-content">
+        <div class="top-stripe"></div>
+        <div class="bar">
+            <!-- Navigation -->
+            <div class="controls-group">
+                <button class="btn" id="back" title="Back">
+                    <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                <button class="btn" id="fwd" title="Forward">
+                    <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" /></svg>
+                </button>
+                <button class="btn" id="reload" title="Reload / Stop">
+                    <svg id="reload-icon" viewBox="0 0 24 24">
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
+                    </svg>
+                    <svg id="stop-icon" viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <button class="btn" id="home" title="Home">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2" />
+                    </svg>
+                </button>
+            </div>
 
-    <div class="bar">
-        <button class="btn" id="back" title="Back">
-            <svg viewBox="0 0 24 24">
-                <path d="M15 18l-6-6 6-6" />
-            </svg>
-        </button>
-        <button class="btn" id="fwd" title="Forward">
-            <svg viewBox="0 0 24 24">
-                <path d="M9 18l6-6-6-6" />
-            </svg>
-        </button>
-        <button class="btn" id="reload" title="Reload / Stop">
-            <svg id="reload-icon" viewBox="0 0 24 24">
-                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-            </svg>
-            <svg id="stop-icon" viewBox="0 0 24 24">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        </button>
-        <input type="text" class="url" id="urlbar" value="https://www.google.com" spellcheck="false">
-        <button class="btn" id="home" title="Home">
-            <svg viewBox="0 0 24 24">
-                <path
-                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2" />
-            </svg>
-        </button>
-        <div id="progress"></div>
+            <!-- URL Bar -->
+            <div class="url-container">
+                <input type="text" class="url" id="urlbar" value="https://www.google.com" spellcheck="false" placeholder="Search or enter URL">
+            </div>
+
+            <!-- Window Controls -->
+            <div class="window-controls">
+                <button class="win-btn" id="win-min" title="Minimize">
+                    <svg viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+                </button>
+                <button class="win-btn" id="win-max" title="Maximize">
+                    <svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+                </button>
+                <button class="win-btn close" id="win-close" title="Close">
+                    <svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+        </div>
     </div>
+
+    <div id="progress"></div>
 
     <script>
         (function () {
             var I = window.__TAURI_INTERNALS__;
             if (!I) { console.error('Tauri IPC not available'); return; }
             var invoke = I.invoke.bind(I);
+
+            // Resize Logic
+            document.querySelectorAll('.resize-edge, .resize-corner').forEach(function(el) {
+                el.addEventListener('mousedown', function(e) {
+                    if (e.buttons === 1) {
+                        invoke('start_window_resize', { label: 'radio-browser-window', direction: el.dataset.direction });
+                    }
+                });
+            });
 
             var ACCENT_COLORS = {
                 green: { dark: [29, 185, 84], light: [25, 156, 71] },
@@ -330,12 +365,6 @@
 
             document.getElementById('home').onclick = function () { invoke('browser_navigate', { url: 'https://www.google.com' }); };
 
-            document.querySelector('.drag-region').addEventListener('mousedown', function (e) {
-                if (e.buttons === 1) {
-                    invoke('drag_browser_window');
-                }
-            });
-
             var ub = document.getElementById('urlbar');
             ub.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
@@ -345,6 +374,11 @@
                     ub.blur();
                 }
             });
+
+            // Window Controls
+            document.getElementById('win-min').onclick = function() { invoke('minimize_browser_window'); };
+            document.getElementById('win-max').onclick = function() { invoke('maximize_browser_window'); };
+            document.getElementById('win-close').onclick = function() { invoke('close_browser_window'); };
 
             // Sync URL
             setInterval(function () {

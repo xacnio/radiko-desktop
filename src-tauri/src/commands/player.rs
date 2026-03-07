@@ -32,12 +32,19 @@ pub async fn play(
     // Serialize play requests to prevent race conditions when rapidly switching stations
     let _play_guard = state.play_lock.lock().await;
 
-    let url = url.trim().to_string();
-    if url.is_empty() {
-        return Err(AppError::InvalidUrl("URL cannot be empty".into()));
-    }
-
     info!("Play requested: {}", url);
+
+    // Check HLS session cache to skip initial ads if we already have a variant session
+    let play_url = {
+        let cache = state.hls_session_cache.lock().unwrap();
+        if let Some(cached) = cache.get(&url) {
+            info!("HLS session cache hit: using {} instead of {}", cached, url);
+            cached.clone()
+        } else {
+            url.clone()
+        }
+    };
+    let original_url = url.clone();
 
     // Take handle out of state BEFORE stopping (stop() blocks on join)
     let old_handle = {
@@ -101,8 +108,11 @@ pub async fn play(
         handle.stop();
     }
 
-    let volume = state.inner.lock().unwrap().volume;
-    let handle = player::start(url.clone(), volume * volume, app.clone(), true).await?;
+    let (volume, output_device, skip_ads) = {
+        let ps = state.inner.lock().unwrap();
+        (ps.volume, ps.output_device.clone(), ps.skip_ads)
+    };
+    let handle = player::start(play_url, original_url, volume * volume, app.clone(), true, output_device, skip_ads).await?;
 
     {
         let mut ps = state.inner.lock().unwrap();
@@ -173,11 +183,14 @@ pub async fn preview_play(
         h.stop();
     }
 
-    let volume = state.inner.lock().unwrap().volume;
+    let (volume, output_device, skip_ads) = {
+        let ps = state.inner.lock().unwrap();
+        (ps.volume, ps.output_device.clone(), ps.skip_ads)
+    };
     // Preview uses 60% of current volume to be subtle
     let preview_volume = (volume * 0.6).powi(2);
-
-    match player::start(url, preview_volume, app, false).await {
+    let preview_original_url = url.clone();
+    match player::start(url, preview_original_url, preview_volume, app, false, output_device, skip_ads).await {
         Ok(handle) => {
             let mut ps = state.inner.lock().unwrap();
             ps.preview_handle = Some(handle);

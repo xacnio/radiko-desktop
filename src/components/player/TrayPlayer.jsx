@@ -217,161 +217,164 @@ export default function TrayPlayer() {
     return (
         <div style={{
             display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: 'rgba(21,21,21,0.95)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: 'rgba(21, 21, 25, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
             borderRadius: '12px',
             color: '#fff',
             width: '100%',
             height: '100%',
             overflow: 'hidden',
             boxSizing: 'border-box',
-            padding: '12px',
+            padding: '10px',
             fontFamily: 'Manrope, sans-serif',
             userSelect: 'none',
             outline: 'none',
-            gap: '8px',
+            gap: '12px',
         }}
             tabIndex={0}
             ref={focusRef}
         >
-            {/* Top row: Cover + Metadata */}
+            {/* Left Cover Art */}
             <div
                 onClick={handleOpenMain}
                 style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: '12px',
-                    flex: 1,
-                    minHeight: 0,
-                    cursor: 'pointer',
-                    padding: '4px',
-                    borderRadius: '8px',
-                    transition: 'background-color 0.15s ease'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-            >
-                {/* Cover Art */}
-                <div style={{
-                    width: '56px',
-                    height: '56px',
+                    width: '60px',
+                    height: '60px',
                     borderRadius: '8px',
                     overflow: 'hidden',
-                    backgroundColor: '#000',
+                    backgroundColor: 'rgba(255,255,255,0.05)',
                     flexShrink: 0,
-                }}>
-                    <img
-                        src={displayCover}
-                        alt="Cover"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => { e.currentTarget.src = '/icon.svg'; e.currentTarget.onerror = null; }}
-                    />
-                </div>
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                    transition: 'transform 0.15s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+                <img
+                    src={displayCover}
+                    alt="Cover"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => { e.currentTarget.src = '/icon.svg'; e.currentTarget.onerror = null; }}
+                />
+            </div>
 
+            {/* Right Column: Metadata + Controls */}
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                flex: 1,
+                minWidth: 0,
+                height: '100%',
+            }}>
                 {/* Metadata */}
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    flex: 1,
-                    minWidth: 0,
-                }}>
+                <div
+                    onClick={handleOpenMain}
+                    style={{
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        // Optional padding to push text up slightly
+                        paddingTop: '2px',
+                    }}
+                >
                     <div style={{
                         fontSize: '13px',
                         fontWeight: 600,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        marginBottom: '2px',
+                        lineHeight: '1.2',
                     }}>
                         {displayTitle}
                     </div>
                     <div style={{
                         fontSize: '11px',
-                        color: 'rgba(255,255,255,0.45)',
+                        color: 'rgba(255,255,255,0.5)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
+                        lineHeight: '1.2',
+                        marginTop: '3px',
                     }}>
                         {displayArtist}
                     </div>
                 </div>
-            </div>
 
-            {/* Bottom row: Controls + Volume */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                justifyContent: 'space-between',
-            }}>
-                {/* Playback controls */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <button
-                        onClick={handlePrev}
-                        style={btnStyle}
-                        title="Previous station"
-                        {...btnHoverProps}
-                    >
-                        <SkipBack size={16} />
-                    </button>
-                    <button
-                        onClick={handlePlayPause}
-                        style={{
-                            ...btnStyle,
-                            color: '#fff',
-                            padding: '8px',
-                            backgroundColor: 'rgba(255,255,255,0.1)',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'; }}
-                    >
-                        {status === 'playing' || status === 'connecting' ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                    </button>
-                    <button
-                        onClick={handleNext}
-                        style={btnStyle}
-                        title="Next station"
-                        {...btnHoverProps}
-                    >
-                        <SkipForward size={16} />
-                    </button>
-                </div>
+                {/* Controls - Playback & Volume inline */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 'auto',
+                }}>
+                    {/* Playback controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: '-6px' }}>
+                        <button
+                            onClick={handlePrev}
+                            style={{ ...btnStyle, padding: '4px' }}
+                            title="Previous station"
+                            {...btnHoverProps}
+                        >
+                            <SkipBack size={15} />
+                        </button>
+                        <button
+                            onClick={handlePlayPause}
+                            style={{
+                                ...btnStyle,
+                                color: '#fff',
+                                padding: '4px 6px',
+                            }}
+                            {...btnHoverProps}
+                        >
+                            {status === 'playing' || status === 'connecting' ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
+                        </button>
+                        <button
+                            onClick={handleNext}
+                            style={{ ...btnStyle, padding: '4px' }}
+                            title="Next station"
+                            {...btnHoverProps}
+                        >
+                            <SkipForward size={15} />
+                        </button>
+                    </div>
 
-                {/* Volume control */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button
-                        onClick={handleMuteToggle}
-                        style={{
-                            ...btnStyle,
-                            color: volume === 0 ? 'rgb(16, 185, 129)' : 'rgba(255,255,255,0.5)',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                    >
-                        {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                    </button>
-                    <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={volume}
-                        onChange={handleVolumeChange}
-                        style={{
-                            width: '80px',
-                            height: '4px',
-                            WebkitAppearance: 'none',
-                            appearance: 'none',
-                            background: `linear-gradient(to right, rgba(255,255,255,0.7) ${volume * 100}%, rgba(255,255,255,0.15) ${volume * 100}%)`,
-                            borderRadius: '2px',
-                            outline: 'none',
-                            cursor: 'pointer',
-                            accentColor: '#fff',
-                        }}
-                    />
+                    {/* Volume */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
+                        <button
+                            onClick={handleMuteToggle}
+                            style={{
+                                ...btnStyle,
+                                padding: '4px',
+                                color: volume === 0 ? 'rgb(16, 185, 129)' : 'rgba(255,255,255,0.6)',
+                            }}
+                            {...btnHoverProps}
+                        >
+                            {volume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                        </button>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={volume}
+                            onChange={handleVolumeChange}
+                            style={{
+                                width: '60px',
+                                height: '4px',
+                                WebkitAppearance: 'none',
+                                appearance: 'none',
+                                background: `linear-gradient(to right, ${volume === 0 ? 'rgba(255,255,255,0.2)' : 'rgb(16, 185, 129)'} ${volume * 100}%, rgba(255,255,255,0.15) ${volume * 100}%)`,
+                                borderRadius: '2px',
+                                outline: 'none',
+                                cursor: 'pointer',
+                            }}
+                        />
+                    </div>
                 </div>
             </div>
         </div>

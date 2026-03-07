@@ -312,10 +312,10 @@ export default function NowPlaying({
     }[status] || status;
 
     const statusColor = isPlaying ? 'bg-success' : isConnecting ? 'bg-warning' : isPaused ? 'bg-warning' : 'bg-text-muted';
-    const fallbackListeners = station?.clickcount || station?.votes || 0;
-    const rawIcy = fetchedListeners !== null ? fetchedListeners : parseInt(streamMetadata?.icy_listeners, 10);
-    const isRealTime = fetchedListeners !== null || (!isNaN(rawIcy) && rawIcy > 0);
-    const listeners = isRealTime ? rawIcy : fallbackListeners;
+    const rawIcy = parseInt(streamMetadata?.icy_listeners, 10);
+    const liveBack = fetchedListeners !== null ? fetchedListeners : null;
+    const listeners = liveBack !== null ? liveBack : (!isNaN(rawIcy) ? rawIcy : 0);
+    const isRealTime = liveBack !== null || (!isNaN(rawIcy) && rawIcy > 0);
     const formatCount = (num) => num > 999 ? (num / 1000).toFixed(1) + 'K' : num;
 
     return (
@@ -588,8 +588,8 @@ export default function NowPlaying({
                             <div className="absolute top-[min(20px,3vh)] left-0 right-0 flex items-center justify-center gap-2 px-10 z-30 w-full flex-wrap animate-text-fade-in shrink-0 pointer-events-none">
                                 <div className="flex items-center justify-center gap-2 flex-wrap pointer-events-auto">
                                     {listeners > 0 && (
-                                        <span className="px-2 py-0.5 rounded-md bg-bg-secondary/50 border border-border/50 text-text-primary text-[10px] font-bold tracking-wider shadow-sm flex items-center gap-1 shrink-0" title={isRealTime ? t('playing.liveListeners') : t('playing.popularity')}>
-                                            <Users size={10} className={isRealTime ? "text-success opacity-90" : "opacity-70"} />
+                                        <span className="px-2 py-0.5 rounded-md bg-bg-secondary/50 border border-border/50 text-text-primary text-[10px] font-bold tracking-wider shadow-sm flex items-center gap-1 shrink-0" title={t('playing.liveListeners')}>
+                                            <Users size={10} className={"text-success opacity-90"} />
                                             {formatCount(listeners)}
                                         </span>
                                     )}

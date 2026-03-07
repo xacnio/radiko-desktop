@@ -115,6 +115,11 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
 
     const [minimizeToTray, setMinimizeToTray] = useState(() => localStorage.getItem('minimize_to_tray') !== 'false');
     const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem('close_to_tray') !== 'false');
+    const [skipAds, setSkipAds] = useState(() => localStorage.getItem('skip_ads') !== 'false');
+
+    useEffect(() => {
+        localStorage.setItem('skip_ads', skipAds);
+    }, [skipAds]);
 
     useEffect(() => {
         localStorage.setItem('minimize_to_tray', minimizeToTray);
@@ -692,6 +697,7 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
     // Lifted Listeners Poller
     useEffect(() => {
         let interval;
+        setFetchedListeners(null);
         if (status === 'playing' && activeStation?.urlResolved) {
             const doFetch = async () => {
                 try {
@@ -700,7 +706,7 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                 } catch (e) { console.log('Listeners fetch err:', e); }
             };
             doFetch();
-            interval = setInterval(doFetch, 15000);
+            interval = setInterval(doFetch, 120000);
         }
         return () => clearInterval(interval);
     }, [status, activeStation?.urlResolved]);
@@ -1304,8 +1310,22 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
         });
     }, [t, notify]);
 
+    const handleResize = (direction) => {
+        invoke('start_window_resize', { label: 'main', direction });
+    };
+
     return (
-        <div className="flex flex-col h-screen">
+        <div className="flex flex-col h-screen relative">
+            {/* Native Resize Handles */}
+            <div className="resize-handle top" onMouseDown={() => handleResize('top')} />
+            <div className="resize-handle bottom" onMouseDown={() => handleResize('bottom')} />
+            <div className="resize-handle left" onMouseDown={() => handleResize('left')} />
+            <div className="resize-handle right" onMouseDown={() => handleResize('right')} />
+            <div className="resize-handle top-left" onMouseDown={() => handleResize('top-left')} />
+            <div className="resize-handle top-right" onMouseDown={() => handleResize('top-right')} />
+            <div className="resize-handle bottom-left" onMouseDown={() => handleResize('bottom-left')} />
+            <div className="resize-handle bottom-right" onMouseDown={() => handleResize('bottom-right')} />
+
             <TitleBar onOpenSettings={() => setTab('settings')} />
             <div className="flex flex-1 overflow-hidden">
                 <div className="shrink-0 relative h-full flex flex-col overflow-x-hidden" style={{ width: leftSidebarWidth }}>
@@ -1369,6 +1389,8 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                             setMinimizeToTray={setMinimizeToTray}
                             closeToTray={closeToTray}
                             setCloseToTray={setCloseToTray}
+                            skipAds={skipAds}
+                            setSkipAds={setSkipAds}
                         />
                     ) : (
                         <StationList
@@ -1576,13 +1598,13 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                             {isCtxSearching && <div className="text-[10px] text-text-muted text-center py-2 animate-pulse font-medium">{t('ctx.quickImageSearching')}</div>}
                             {ctxImageSearchResults && ctxImageSearchResults.length === 0 && <div className="text-[10px] text-text-muted text-center py-2">{t('ctx.quickImageNotFound')}</div>}
                             {ctxImageSearchResults && ctxImageSearchResults.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2 justify-center p-1 max-h-[235px] overflow-y-auto custom-scrollbar pr-1.5 focus:outline-none" tabIndex="-1">
+                                <div className="grid grid-cols-2 gap-2 p-1 max-h-[300px] overflow-y-auto custom-scrollbar pr-1.5 focus:outline-none" tabIndex="-1">
                                     {ctxImageSearchResults.map((url, i) => (
-                                        <div key={i} className="aspect-square bg-black/20 rounded-md cursor-pointer overflow-hidden border border-transparent hover:border-accent hover:scale-[1.05] hover:z-10 hover:shadow-2xl transition-all duration-300 relative group"
+                                        <div key={i} className="w-full h-24 bg-black/20 rounded-md cursor-pointer overflow-hidden border border-transparent hover:border-accent hover:z-10 hover:shadow-xl transition-all duration-200 relative group"
                                             onClick={(e) => { e.stopPropagation(); handleApplyQuickImage(ctxMenu.station, url, i); }}
                                         >
-                                            <img src={url} alt="" className="w-full h-full object-cover" />
-                                            <div id={`quick-img-dl-${i}`} className="hidden absolute inset-0 bg-black/60 flex items-center justify-center text-[10px] text-white font-bold backdrop-blur-sm">{t('ctx.quickImageDownloading')}</div>
+                                            <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                            <div id={`quick-img-dl-${i}`} className="hidden absolute inset-0 bg-black/60 flex items-center justify-center text-[10px] text-white font-bold backdrop-blur-sm text-center px-1 leading-tight">{t('ctx.quickImageDownloading')}</div>
                                         </div>
                                     ))}
                                 </div>

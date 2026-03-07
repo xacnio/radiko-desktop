@@ -387,14 +387,17 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
 
     // 1. Create the base native Window
     let window = WindowBuilder::new(&app, "radio-browser-window")
-        .title("")
+        .title("Radiko Browser")
         .inner_size(1200.0, 700.0)
+        .decorations(false) // Frameless for premium look
+        .resizable(true)    // Enable resizing
+        .shadow(true)      // Helps some Linux environments with hit testing
         .background_color(bg.into())
         .build()
         .map_err(|e: tauri::Error| AppError::Settings(e.to_string()))?;
 
     // Fixed Layout Constants (Logical)
-    let sidebar_w_log = 250.0;
+    let sidebar_w_log = 260.0;
     let toolbar_h_log = 70.0;
 
     let sf = window.scale_factor().unwrap_or(1.0);
@@ -427,7 +430,7 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
             )
             .background_color(bg.into()),
             tauri::PhysicalPosition::new(0, 0),
-            tauri::PhysicalSize::new(size.width.saturating_sub(sidebar_w_phys), toolbar_h_phys),
+            tauri::PhysicalSize::new(size.width, toolbar_h_phys),
         )
         .map_err(|e: tauri::Error| AppError::Settings(e.to_string()))?;
 
@@ -615,10 +618,23 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
                 WebviewUrl::App("/browser-sidebar.html".into()),
             )
             .background_color(bg.into()),
-            tauri::PhysicalPosition::new(size.width.saturating_sub(sidebar_w_phys) as i32, 0),
-            tauri::PhysicalSize::new(sidebar_w_phys, size.height),
+            tauri::PhysicalPosition::new(
+                size.width.saturating_sub(sidebar_w_phys) as i32,
+                toolbar_h_phys as i32,
+            ),
+            tauri::PhysicalSize::new(sidebar_w_phys, size.height.saturating_sub(toolbar_h_phys)),
         )
         .map_err(|e: tauri::Error| AppError::Settings(e.to_string()))?;
+
+    // 5. Linux Background Fix: Ensure the main window background doesn't flicker or show through
+    #[cfg(target_os = "linux")]
+    {
+        let wb = window.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let _ = wb.set_background_color(Some(bg.into()));
+        });
+    }
 
     // Auto-hide loading overlay after a short delay
     {
@@ -668,27 +684,49 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
         let size = w
             .inner_size()
             .unwrap_or(tauri::PhysicalSize::new(1200, 700));
-        let sidebar_w = (250.0 * sf) as u32;
-        let toolbar_h = (70.0 * sf) as u32;
-        let content_w = size.width.saturating_sub(sidebar_w);
-        let content_h = size.height.saturating_sub(toolbar_h);
+        
+        let sidebar_w_log = 260.0;
+        let toolbar_h_log = 70.0;
+        
+        let sidebar_w_phys = (sidebar_w_log * sf).round() as u32;
+        let toolbar_h_phys = (toolbar_h_log * sf).round() as u32;
+        
+        let content_w_phys = size.width.saturating_sub(sidebar_w_phys);
+        let content_h_phys = size.height.saturating_sub(toolbar_h_phys);
 
         use tauri::Manager;
+        
+        // 1. Toolbar: Full Width
         if let Some(tb) = w.get_webview("toolbar-view") {
             let _ = tb.set_position(tauri::PhysicalPosition::new(0, 0));
-            let _ = tb.set_size(tauri::PhysicalSize::new(content_w, toolbar_h));
+            let _ = tb.set_size(tauri::PhysicalSize::new(size.width, toolbar_h_phys));
         }
+        
+        // 2. Browser: Left Side
         if let Some(bv) = w.get_webview("browser-view") {
-            let _ = bv.set_position(tauri::PhysicalPosition::new(0, toolbar_h as i32));
-            let _ = bv.set_size(tauri::PhysicalSize::new(content_w, content_h));
+            let _ = bv.set_position(tauri::PhysicalPosition::new(0, toolbar_h_phys as i32));
+            let _ = bv.set_size(tauri::PhysicalSize::new(content_w_phys, content_h_phys));
         }
+        
+        // 3. Sidebar: Right Side
         if let Some(sb) = w.get_webview("sidebar-view") {
-            let _ = sb.set_position(tauri::PhysicalPosition::new(content_w as i32, 0));
-            let _ = sb.set_size(tauri::PhysicalSize::new(sidebar_w, size.height));
+            let _ = sb.set_position(tauri::PhysicalPosition::new(content_w_phys as i32, toolbar_h_phys as i32));
+            let _ = sb.set_size(tauri::PhysicalSize::new(sidebar_w_phys, content_h_phys));
         }
     }
 
-    // 7. Window resize handler
+    // 7. Initial Layout Pass (Immediate + Delayed for stability)
+    layout_with_sidebar(&window);
+    
+    let window_init = window.clone();
+    tauri::async_runtime::spawn(async move {
+        for delay in [10, 100, 300, 600, 1000] {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            layout_with_sidebar(&window_init);
+        }
+    });
+
+    // 8. Window resize handler
     let w_ev = window.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
@@ -697,7 +735,7 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
 
             let w_delayed = w.clone();
             tauri::async_runtime::spawn(async move {
-                for delay in [100, 300, 600] {
+                for delay in [5, 50, 200, 500] {
                     tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                     layout_with_sidebar(&w_delayed);
                 }
@@ -776,8 +814,27 @@ pub fn maximize_browser_window(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub fn drag_browser_window(app: tauri::AppHandle) {
-    if let Some(window) = app.get_window("radio-browser-window") {
+pub fn drag_window(app: tauri::AppHandle, label: String) {
+    if let Some(window) = app.get_window(&label) {
         let _ = window.start_dragging();
+    }
+}
+
+#[tauri::command]
+pub fn start_window_resize(app: tauri::AppHandle, label: String, direction: String) {
+    use tauri_runtime::ResizeDirection;
+    if let Some(window) = app.get_window(&label) {
+        let dir = match direction.as_str() {
+            "top" => ResizeDirection::North,
+            "bottom" => ResizeDirection::South,
+            "left" => ResizeDirection::West,
+            "right" => ResizeDirection::East,
+            "top-left" => ResizeDirection::NorthWest,
+            "top-right" => ResizeDirection::NorthEast,
+            "bottom-left" => ResizeDirection::SouthWest,
+            "bottom-right" => ResizeDirection::SouthEast,
+            _ => return,
+        };
+        let _ = window.start_resize_dragging(dir);
     }
 }

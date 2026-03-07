@@ -52,7 +52,9 @@ export default function SettingsView({
     minimizeToTray,
     setMinimizeToTray,
     closeToTray,
-    setCloseToTray
+    setCloseToTray,
+    skipAds,
+    setSkipAds
 }) {
     const { t, i18n } = useTranslation();
     const { notify } = useNotification();
@@ -94,6 +96,19 @@ export default function SettingsView({
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [releaseHistory, setReleaseHistory] = useState(null);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+    // Audio devices
+    const [audioDevices, setAudioDevices] = useState([]);
+    const [selectedDevice, setSelectedDevice] = useState('');
+
+    useEffect(() => {
+        if (activeTab === 'general') {
+            invoke('get_audio_devices').then(setAudioDevices).catch(console.error);
+            invoke('get_settings').then(s => {
+                setSelectedDevice(s.output_device || '');
+            }).catch(console.error);
+        }
+    }, [activeTab]);
 
     useEffect(() => {
         getAppVersion().then(setAppVersion).catch(console.error);
@@ -348,6 +363,32 @@ export default function SettingsView({
                                 </div>
                             </div>
 
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-4 border-t border-border/30">
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-bold text-text-primary">{t('settings.outputDevice') || 'Audio Output Device'}</h4>
+                                    <p className="text-xs text-text-muted">{t('settings.outputDeviceDesc') || 'Select the device to play sound from'}</p>
+                                </div>
+                                <div className="relative group w-full md:w-auto">
+                                    <select
+                                        className="appearance-none bg-bg-surface border border-border text-text-primary text-sm rounded-xl focus:ring-2 focus:ring-accent focus:border-accent block pl-4 pr-10 py-2.5 cursor-pointer hover:bg-bg-surface-hover transition-all w-full md:min-w-[140px] max-w-[250px] truncate"
+                                        value={selectedDevice}
+                                        onChange={(e) => {
+                                            const dev = e.target.value;
+                                            setSelectedDevice(dev);
+                                            invoke('set_audio_device', { device: dev }).catch(console.error);
+                                        }}
+                                    >
+                                        <option value="">{t('settings.defaultDevice') || 'Default Device'}</option>
+                                        {audioDevices.map((dev, idx) => (
+                                            <option key={idx} value={dev}>{dev}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted group-hover:text-accent transition-colors">
+                                        <ChevronRight size={14} className="rotate-90" />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="flex flex-col gap-4 pt-4 border-t border-border/30">
                                 <div className="space-y-1">
                                     <h4 className="text-sm font-bold text-text-primary">{t('settings.theme')}</h4>
@@ -455,6 +496,25 @@ export default function SettingsView({
                                             ${closeToTray ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
                                     >
                                         <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${closeToTray ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-4 py-1 border-t border-border/30 pt-4">
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-bold text-text-primary">{t('settings.skipAds')}</h4>
+                                        <p className="text-xs text-text-muted">{t('settings.skipAdsDesc')}</p>
+                                        <p className="text-[10px] text-accent/80 font-medium italic">{t('settings.skipAdsWarning')}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const newVal = !skipAds;
+                                            setSkipAds(newVal);
+                                            invoke('save_skip_ads', { skipAds: newVal }).catch(console.error);
+                                        }}
+                                        className={`w-10 h-5 rounded-full transition-all relative p-1 cursor-pointer outline-none shrink-0
+                                            ${skipAds ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
+                                    >
+                                        <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${skipAds ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </button>
                                 </div>
                             </div>

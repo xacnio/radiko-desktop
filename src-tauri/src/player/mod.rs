@@ -10,13 +10,12 @@ pub mod eq;
 pub mod stream;
 pub mod types;
 
-use bytes::Bytes;
 use rodio::{OutputStream, Sink};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
@@ -56,15 +55,18 @@ impl PlayerHandle {
 /// Pipeline:
 ///   [async task: HTTP + ICY] --channel--> [std thread: symphonia + rodio]
 pub async fn start(
-    url: String,
+    play_url: String,
+    original_url: String,
     volume: f32,
     app_handle: AppHandle,
     emit_events: bool,
+    output_device: Option<String>,
+    skip_ads: bool,
 ) -> Result<PlayerHandle, AppError> {
     let shutdown = Arc::new(AtomicBool::new(false));
 
-    // Bounded channel: audio bytes from stream task → decode thread
-    let (audio_tx, audio_rx) = mpsc::sync_channel::<Bytes>(CHANNEL_BOUND);
+    // Bounded channel: audio bytes/commands from stream task → decode thread
+    let (audio_tx, audio_rx) = mpsc::sync_channel::<types::PlayerMessage>(CHANNEL_BOUND);
 
     // Create audio output + sink on a dedicated thread.
     // OutputStream is !Send — it must live on its creating thread.
@@ -76,12 +78,42 @@ pub async fn start(
     let decode_thread = std::thread::Builder::new()
         .name("radio-decode".into())
         .spawn(move || {
+            // Find custom device or fallback to default
+            let mut selected_device = None;
+            if let Some(dev_name) = &output_device {
+                use rodio::cpal::traits::{HostTrait, DeviceTrait};
+                let host = rodio::cpal::default_host();
+                if let Ok(devices) = host.output_devices() {
+                    for d in devices {
+                        if let Ok(name) = d.name() {
+                            if name == *dev_name {
+                                selected_device = Some(d);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Create audio output on this thread
-            let (_output_stream, stream_handle) = match OutputStream::try_default() {
-                Ok(v) => v,
-                Err(e) => {
-                    let _ = sink_tx.send(Err(format!("Audio output error: {}", e)));
-                    return;
+            let (_output_stream, stream_handle) = match selected_device {
+                Some(device) => {
+                    match OutputStream::try_from_device(&device) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ = sink_tx.send(Err(format!("Custom audio output error: {}", e)));
+                            return;
+                        }
+                    }
+                }
+                None => {
+                    match OutputStream::try_default() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ = sink_tx.send(Err(format!("Audio output error: {}", e)));
+                            return;
+                        }
+                    }
                 }
             };
 
@@ -115,15 +147,18 @@ pub async fn start(
     // Spawn the async stream task (with reconnection)
     let shutdown_stream = Arc::clone(&shutdown);
     let app_handle_stream = app_handle.clone();
-    let url_clone = url.clone();
+    let play_url_clone = play_url.clone();
+    let original_url_clone = original_url.clone();
 
     let stream_task = tokio::spawn(async move {
         run_stream_with_reconnect(
-            url_clone,
+            play_url_clone,
+            original_url_clone,
             audio_tx,
             shutdown_stream,
             app_handle_stream,
             emit_events,
+            skip_ads,
         )
         .await;
     });
@@ -142,11 +177,13 @@ pub async fn start(
 
 /// Stream loop with exponential backoff reconnection.
 async fn run_stream_with_reconnect(
-    url: String,
-    audio_tx: mpsc::SyncSender<Bytes>,
+    play_url: String,
+    original_url: String,
+    audio_tx: mpsc::SyncSender<types::PlayerMessage>,
     shutdown: Arc<AtomicBool>,
     app_handle: AppHandle,
     emit_events: bool,
+    skip_ads: bool,
 ) {
     let mut retry_count: u32 = 0;
 
@@ -155,12 +192,22 @@ async fn run_stream_with_reconnect(
             break;
         }
 
+        // Get the best URL to play: check cache first, fallback to play_url (original requested)
+        let current_stream_url = if let Some(state) = app_handle.try_state::<crate::state::AppState>() {
+            let cache = state.hls_session_cache.lock().unwrap();
+            cache.get(&original_url).cloned().unwrap_or(play_url.clone())
+        } else {
+            play_url.clone()
+        };
+
         let config = stream::StreamConfig {
-            url: url.clone(),
+            url: current_stream_url.clone(),
+            original_url: original_url.clone(),
             audio_tx: audio_tx.clone(),
             shutdown: Arc::clone(&shutdown),
             app_handle: app_handle.clone(),
             emit_events,
+            skip_ads,
         };
 
         match stream::run_stream(&config).await {
@@ -172,6 +219,17 @@ async fn run_stream_with_reconnect(
             Err(e) => {
                 if shutdown.load(Ordering::Relaxed) {
                     break;
+                }
+
+                // If a cached session URL failed, clear it so next attempt uses the master playlist again
+                if let Some(state) = app_handle.try_state::<crate::state::AppState>() {
+                    let mut cache = state.hls_session_cache.lock().unwrap();
+                    if let Some(cached) = cache.get(&original_url) {
+                        if cached == &current_stream_url {
+                            info!("HLS session URL failed, clearing cache for {}", original_url);
+                            cache.remove(&original_url);
+                        }
+                    }
                 }
 
                 retry_count += 1;

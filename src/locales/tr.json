@@ -204,7 +204,13 @@
         "minimizeToTray": "Simge durumuna küçültüldüğünde tepsiye gizle",
         "minimizeToTrayDesc": "Pencere küçültüldüğünde görev çubuğu yerine sistem tepsisine gizlenir",
         "closeToTray": "Kapatıldığında tepsiye gizle",
-        "closeToTrayDesc": "Pencere kapatıldığında uygulama tamamen kapanmak yerine sistem tepsisine gizlenir"
+        "closeToTrayDesc": "Pencere kapatıldığında uygulama tamamen kapanmak yerine sistem tepsisine gizlenir",
+        "outputDevice": "Ses Çıkış Cihazı",
+        "outputDeviceDesc": "Uygulamanın ses vereceği cihazı seçin",
+        "defaultDevice": "Varsayılan Cihaz",
+        "skipAds": "HLS Reklamlarını Atla",
+        "skipAdsDesc": "HLS (m3u8) yayınlarındaki reklam bölümlerini otomatik olarak atlar.",
+        "skipAdsWarning": "Not: Her radyo istasyonu için çalışmayabilir."
     },
     "ctx": {
         "play": "Çal",
@@ -399,5 +405,20 @@
         "playPause": "Oynat / Duraklat",
         "pause": "Duraklat",
         "nextStation": "Sonraki radyo"
+    },
+    "tray": {
+        "radikoDesktop": "Radiko Desktop",
+        "stopped": "Durduruldu",
+        "playing": "Şu An Çalıyor",
+        "paused": "Duraklatıldı",
+        "play": "Oynat",
+        "pause": "Duraklat",
+        "next": "Sonraki Radyo",
+        "prev": "Önceki Radyo",
+        "volume": "Ses Seviyesi",
+        "mute": "Sessiz (0%)",
+        "miniPlayer": "Mini Player'ı Göster",
+        "mainWindow": "Ana Pencereyi Göster",
+        "quit": "Çıkış"
     }
 }

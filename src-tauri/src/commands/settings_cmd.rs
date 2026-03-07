@@ -82,8 +82,13 @@ pub fn save_language(app: AppHandle, lang: String) -> Result<(), AppError> {
         .app_data_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut settings = Settings::load(&dir);
-    settings.language = Some(lang);
-    settings.save(&dir)
+    settings.language = Some(lang.clone());
+    let res = settings.save(&dir);
+    if res.is_ok() {
+        use tauri::Emitter;
+        let _ = app.emit("language-changed", lang);
+    }
+    res
 }
 
 #[tauri::command]
@@ -95,6 +100,92 @@ pub fn save_theme(app: AppHandle, theme: String) -> Result<(), AppError> {
     let mut settings = Settings::load(&dir);
     settings.theme = Some(theme);
     settings.save(&dir)
+}
+
+#[tauri::command]
+pub fn save_skip_ads(app: AppHandle, skip_ads: bool) -> Result<(), AppError> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let mut settings = Settings::load(&dir);
+    settings.skip_ads = skip_ads;
+
+    // Update runtime state too
+    let state = app.state::<crate::state::AppState>();
+    {
+        let mut inner = state.inner.lock().unwrap();
+        inner.skip_ads = skip_ads;
+    }
+
+    settings.save(&dir)
+}
+
+#[tauri::command]
+pub fn get_audio_devices() -> Result<Vec<String>, AppError> {
+    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+    let host = rodio::cpal::default_host();
+    
+    let mut devices = Vec::new();
+    match host.output_devices() {
+        Ok(output_devices) => {
+            for device in output_devices {
+                if let Ok(name) = device.name() {
+                    devices.push(name);
+                }
+            }
+        }
+        Err(e) => return Err(AppError::AudioOutput(format!("Failed to enumerate output devices: {}", e))),
+    };
+    
+    Ok(devices)
+}
+
+#[tauri::command]
+pub async fn set_audio_device(
+    app: AppHandle,
+    device: String,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<(), AppError> {
+    let dir = crate::commands::app_data_dir(&app)?;
+    let mut settings = Settings::load(&dir);
+
+    let device_opt = if device.trim().is_empty() { None } else { Some(device.clone()) };
+    settings.output_device = device_opt.clone();
+
+    // Update runtime state too
+    let (was_playing, url, station_name, station_image) = {
+        let mut inner = state.inner.lock().unwrap();
+        inner.output_device = device_opt;
+        
+        let playing = inner.status == crate::player::types::PlaybackStatus::Playing 
+            || inner.status == crate::player::types::PlaybackStatus::Connecting
+            || inner.status == crate::player::types::PlaybackStatus::Reconnecting;
+            
+        (
+            playing,
+            inner.current_url.clone(),
+            inner.station_name.clone(),
+            inner.station_image.clone()
+        )
+    };
+
+    settings.save(&dir)?;
+
+    // If something was playing, restart playback with the new device immediately
+    if was_playing {
+        if let Some(target_url) = url {
+            crate::commands::play(
+                target_url,
+                station_name,
+                station_image,
+                app.clone(),
+                state,
+            ).await?;
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

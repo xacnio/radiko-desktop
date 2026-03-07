@@ -204,7 +204,13 @@
         "minimizeToTray": "In den Infobereich minimieren",
         "minimizeToTrayDesc": "Das Fenster beim Minimieren in den Infobereich statt in die Taskleiste ausblenden",
         "closeToTray": "Beim Schließen in den Infobereich minimieren",
-        "closeToTrayDesc": "Das Fenster beim Schließen in den Infobereich ausblenden, statt die Anwendung zu beenden"
+        "closeToTrayDesc": "Das Fenster beim Schließen in den Infobereich ausblenden, statt die Anwendung zu beenden",
+        "outputDevice": "Audio-Ausgabegerät",
+        "outputDeviceDesc": "Wählen Sie das Gerät zur Tonwiedergabe aus",
+        "defaultDevice": "Standardgerät",
+        "skipAds": "HLS-Werbung überspringen",
+        "skipAdsDesc": "Überspringt automatisch Werbesegmente in HLS (m3u8)-Streams.",
+        "skipAdsWarning": "Hinweis: Funktioniert möglicherweise nicht für jeden Radiosender."
     },
     "ctx": {
         "play": "Abspielen",
@@ -399,5 +405,20 @@
         "playPause": "Abspielen / Pausieren",
         "pause": "Pausieren",
         "nextStation": "Nächster Sender"
+    },
+    "tray": {
+        "radikoDesktop": "Radiko Desktop",
+        "stopped": "Gestoppt",
+        "playing": "Aktuelle Wiedergabe",
+        "paused": "Pausiert",
+        "play": "Abspielen",
+        "pause": "Pausieren",
+        "next": "Nächster Sender",
+        "prev": "Vorheriger Sender",
+        "volume": "Lautstärke",
+        "mute": "Stumm (0%)",
+        "miniPlayer": "Mini Player anzeigen",
+        "mainWindow": "Hauptfenster anzeigen",
+        "quit": "Beenden"
     }
 }
