@@ -400,7 +400,7 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray_win = builder.build()?;
 
-    let _tray_win_clone = _tray_win.clone();
+    let tray_win_clone = _tray_win.clone();
 
     // Hide tray window when it loses focus (Linux/macOS)
     #[cfg(not(target_os = "windows"))]
