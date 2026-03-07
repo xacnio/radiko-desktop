@@ -174,4 +174,21 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
+
+      - name: List build output
+        if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
+        run: find src-tauri/target -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) 2>/dev/null || true
+
+      - name: Upload Artifacts
+        if: ${{ github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: radiko-${{ matrix.cache-key }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.exe
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.rpm
+            src-tauri/target/**/release/bundle/**/*.AppImage
+          if-no-files-found: warn
