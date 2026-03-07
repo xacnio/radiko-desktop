@@ -258,7 +258,8 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let show_i = MenuItem::with_id(app, "show", "Show Main Window", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+    let mini_i = MenuItem::with_id(app, "mini", "Show Mini Player", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&mini_i, &show_i, &quit_i])?;
 
     // Pre-create the tray window
     #[allow(unused_mut)]
@@ -303,15 +304,29 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(icon) = app.default_window_icon() {
         let _tray = TrayIconBuilder::new()
             .menu(&menu)
+            .menu_on_left_click(false)
             .tooltip("Radiko Desktop")
             .icon(icon.clone())
             .on_menu_event(|app, event| match event.id.as_ref() {
+                "mini" => {
+                    if let Some(window) = app.get_webview_window("tray") {
+                        if window.is_visible().unwrap_or(false) {
+                            let _ = window.hide();
+                        } else {
+                            let _ = window.move_window(Position::TrayCenter);
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.emit("tray-opened", ());
+                        }
+                    }
+                }
                 "quit" => {
                     app.exit(0);
                 }
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.show();
+                        let _ = window.unminimize();
                         let _ = window.set_focus();
                     }
                 }
