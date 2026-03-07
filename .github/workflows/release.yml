@@ -31,18 +31,24 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "is_new=false" >> $GITHUB_OUTPUT
             echo "should_release=false" >> $GITHUB_OUTPUT
             echo "Version $VERSION already tagged. Skipping release steps."
+            # Append short sha to ensure tauri-action still generates artifacts
+            SHA_SHORT=$(git rev-parse --short HEAD)
+            echo "tag=${TAG}-dev-${SHA_SHORT}" >> $GITHUB_OUTPUT
           else
             echo "is_new=true" >> $GITHUB_OUTPUT
             if [ "${{ github.event.inputs.make_release }}" == "true" ]; then
               echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "tag=$TAG" >> $GITHUB_OUTPUT
               echo "New version $VERSION detected and release requested."
             else
               echo "should_release=false" >> $GITHUB_OUTPUT
+              # Append short sha to ensure tauri-action still generates artifacts
+              SHA_SHORT=$(git rev-parse --short HEAD)
+              echo "tag=${TAG}-dev-${SHA_SHORT}" >> $GITHUB_OUTPUT
               echo "New version $VERSION detected but artifact-only mode active."
             fi
           fi
