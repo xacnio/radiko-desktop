@@ -4,7 +4,7 @@
   <p>Desktop radio client built with Tauri 2 + React</p>
 
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-  [![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/xacnio/radiko-desktop/releases)
+  [![Version](https://img.shields.io/badge/version-1.0.6-blue)](https://github.com/xacnio/radiko-desktop/releases)
 </div>
 
 ---
