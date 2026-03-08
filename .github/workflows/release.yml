@@ -151,7 +151,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          shared-key: ${{ matrix.cache-key }}
+          shared-key: ${{ matrix.cache-key }}-${{ hashFiles('package.json') }}
       
       - name: Cache node_modules
         uses: actions/cache@v4
