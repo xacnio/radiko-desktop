@@ -257,14 +257,16 @@ pub fn await_frontend_and_close_splash(
             }
         };
 
-        for _ in 0..50 {
+        // Wait for frontend to become visible or timeout after 10s
+        for i in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
             if poll_win.is_visible().unwrap_or(false) {
+                tracing::info!("Frontend ready after {}ms", i * 100);
                 show_and_close_splash(&app_handle);
                 return;
             }
         }
-        tracing::warn!("Frontend didn't show window within 5s, forcing show");
+        tracing::warn!("Frontend didn't show window within 10s, forcing show");
         show_and_close_splash(&app_handle);
     });
 }
@@ -400,6 +402,8 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray_win = builder.build()?;
 
+    // Clone for event handler (only used on Linux/macOS)
+    #[cfg(not(target_os = "windows"))]
     let tray_win_clone = _tray_win.clone();
 
     // Hide tray window when it loses focus (Linux/macOS)

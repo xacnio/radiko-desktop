@@ -6,6 +6,8 @@
 //! - Exposing pause/resume/volume controls via the shared Sink
 
 pub mod decoder;
+#[cfg(target_os = "windows")]
+pub mod device_monitor;
 pub mod eq;
 pub mod stream;
 pub mod types;

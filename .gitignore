@@ -5,4 +5,21 @@ Cargo.lock
 *.log
 updater.key
 updater.key.pub
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.fleet/
