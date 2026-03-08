@@ -139,6 +139,17 @@ pub fn emit_metadata(app: &AppHandle, metadata: StreamMetadata) {
         // Ensure status is synced
         ms.set_playing();
     }
+
+    // Update Discord RPC with new metadata
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        if let Ok(ps) = state.inner.lock() {
+            let station = ps.station_name.as_deref().unwrap_or("Unknown Station");
+            let meta_title = metadata.title.as_deref();
+            let enriched = ps.enriched_cover.as_deref();
+            let album_name = ps.enriched_album.as_deref();
+            state.discord_rpc.update_presence(station, meta_title, enriched, album_name);
+        }
+    }
 }
 
 pub fn emit_error(app: &AppHandle, message: &str) {

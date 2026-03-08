@@ -67,6 +67,7 @@ Radiko is a desktop radio player. You can browse stations, add your own streams,
 **💻 Platform Integration**
 - OS media transport controls (Windows SMTC, macOS/Linux MPRIS)
 - Windows taskbar thumbnail buttons (Previous / Play-Pause / Next)
+- Discord Rich Presence — show what you're listening to on Discord
 - Backup & restore all data as a single .zip file
 - Built-in auto-updater
 
@@ -111,6 +112,7 @@ Users can share station lists via backup files. We take no responsibility for sh
 | [radio-browser.info](https://www.radio-browser.info) | Community-driven radio station database | GPL-3.0 |
 | [Tauri](https://tauri.app) | Lightweight desktop app framework | MIT |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | Pure Rust audio decoding library | MPL-2.0 |
+| [discord-rich-presence](https://github.com/vionya/discord-rich-presence) | Discord Rich Presence library for Rust | MIT |
 
 ## AI Disclosure
 

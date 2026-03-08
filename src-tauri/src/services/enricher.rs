@@ -51,6 +51,23 @@ pub async fn enrich_metadata_background(app: AppHandle, title: String, station_n
 
                         let _ = app.emit("metadata-enriched", enriched_result.clone());
 
+                        // Save enriched cover to state for Discord RPC
+                        if let Some(state) = app.try_state::<crate::state::AppState>() {
+                            if let Ok(mut ps) = state.inner.lock() {
+                                ps.enriched_cover = Some(big_cover.clone());
+                                ps.enriched_album = Some(album.clone());
+                            }
+                            
+                            // Update Discord RPC with enriched cover
+                            if let Ok(ps) = state.inner.lock() {
+                                let station = ps.station_name.as_deref().unwrap_or("Unknown Station");
+                                let meta_title = ps.stream_metadata.as_ref().and_then(|m| m.title.as_deref());
+                                let enriched = ps.enriched_cover.as_deref();
+                                let album_name = ps.enriched_album.as_deref();
+                                state.discord_rpc.update_presence(station, meta_title, enriched, album_name);
+                            }
+                        }
+
                         // Save to history automatically
 
                         // Save to history automatically

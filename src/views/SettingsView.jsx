@@ -54,7 +54,9 @@ export default function SettingsView({
     closeToTray,
     setCloseToTray,
     skipAds,
-    setSkipAds
+    setSkipAds,
+    discordRpc,
+    setDiscordRpc
 }) {
     const { t, i18n } = useTranslation();
     const { notify } = useNotification();
@@ -515,6 +517,24 @@ export default function SettingsView({
                                             ${skipAds ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
                                     >
                                         <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${skipAds ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-4 py-1 border-t border-border/30 pt-4">
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-bold text-text-primary">{t('settings.discordRpc') || 'Discord Rich Presence'}</h4>
+                                        <p className="text-xs text-text-muted">{t('settings.discordRpcDesc') || 'Show what you\'re listening to on Discord'}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const newVal = !discordRpc;
+                                            setDiscordRpc(newVal);
+                                            invoke('set_discord_rpc', { enabled: newVal }).catch(console.error);
+                                        }}
+                                        className={`w-10 h-5 rounded-full transition-all relative p-1 cursor-pointer outline-none shrink-0
+                                            ${discordRpc ? 'bg-accent shadow-lg shadow-accent/20' : 'bg-bg-surface-active border border-border/50'}`}
+                                    >
+                                        <div className={`w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${discordRpc ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </button>
                                 </div>
                             </div>
@@ -1032,6 +1052,7 @@ export default function SettingsView({
                                     { name: 'radio-browser.info', desc: 'Community-driven radio database', license: 'GPL-3.0', url: 'https://www.radio-browser.info' },
                                     { name: 'Tauri', desc: 'Lightweight desktop app framework', license: 'MIT', url: 'https://tauri.app' },
                                     { name: 'Symphonia', desc: 'Symphonia decoding library', license: 'MPL-2.0', url: 'https://github.com/pdeljanov/Symphonia' },
+                                    { name: 'discord-rich-presence', desc: 'Discord Rich Presence library for Rust', license: 'MIT', url: 'https://github.com/vionya/discord-rich-presence' },
                                 ].map(item => (
                                     <button
                                         key={item.name}

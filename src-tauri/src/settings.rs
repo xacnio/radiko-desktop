@@ -25,6 +25,8 @@ pub struct Settings {
     pub output_device: Option<String>,
     #[serde(default = "default_skip_ads")]
     pub skip_ads: bool,
+    #[serde(default)]
+    pub discord_rpc: bool,
 }
 
 fn default_skip_ads() -> bool { true }
@@ -43,6 +45,7 @@ impl Default for Settings {
             close_to_tray: false,
             output_device: None,
             skip_ads: true,
+            discord_rpc: false,
         }
     }
 }

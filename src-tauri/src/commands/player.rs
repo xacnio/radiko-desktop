@@ -52,9 +52,11 @@ pub async fn play(
         let h = ps.handle.take();
         ps.status = PlaybackStatus::Connecting;
         ps.current_url = Some(url.clone());
-        ps.station_name = station_name;
+        ps.station_name = station_name.clone();
         ps.station_image = station_image.clone();
         ps.stream_metadata = None;
+        ps.enriched_cover = None; // Clear enriched cover when changing station
+        ps.enriched_album = None; // Clear enriched album when changing station
         h
     };
 
@@ -63,7 +65,8 @@ pub async fn play(
 
     let expected_url = url.clone();
     let app_clone = app.clone();
-    if let Some(img_url) = station_image {
+    if let Some(ref img_url) = station_image {
+        let img_url = img_url.clone();
         tauri::async_runtime::spawn(async move {
             info!("download_cover: starting download for {}", img_url);
             match download_cover(img_url, app_clone.clone()).await {
@@ -119,6 +122,15 @@ pub async fn play(
         ps.handle = Some(handle);
     }
 
+    // Update Discord RPC
+    {
+        let ps = state.inner.lock().unwrap();
+        let station = ps.station_name.as_deref().unwrap_or("Unknown Station");
+        let enriched = ps.enriched_cover.as_deref();
+        let album_name = ps.enriched_album.as_deref();
+        state.discord_rpc.update_presence(station, None, enriched, album_name);
+    }
+
     // Persist last URL
     if let Ok(dir) = app_data_dir(&app) {
         let ps = state.inner.lock().unwrap();
@@ -145,6 +157,9 @@ pub async fn stop(app: AppHandle, state: State<'_, AppState>) -> Result<(), AppE
     if let Some(handle) = old_handle {
         handle.stop();
     }
+
+    // Clear Discord RPC
+    state.discord_rpc.clear_presence();
 
     events::emit_status(&app, PlaybackStatus::Stopped);
     Ok(())
@@ -223,6 +238,9 @@ pub async fn pause(app: AppHandle, state: State<'_, AppState>) -> Result<(), App
         ps.status = PlaybackStatus::Paused;
         drop(ps);
 
+        // Clear Discord RPC when paused
+        state.discord_rpc.clear_presence();
+
         events::emit_status(&app, PlaybackStatus::Paused);
         Ok(())
     } else {
@@ -240,6 +258,16 @@ pub async fn resume(app: AppHandle, state: State<'_, AppState>) -> Result<(), Ap
         let mut ps = state.inner.lock().unwrap();
         ps.status = PlaybackStatus::Playing;
         drop(ps);
+
+        // Update Discord RPC when resuming
+        {
+            let ps = state.inner.lock().unwrap();
+            let station = ps.station_name.as_deref().unwrap_or("Unknown Station");
+            let metadata = ps.stream_metadata.as_ref().and_then(|m| m.title.as_deref());
+            let enriched = ps.enriched_cover.as_deref();
+            let album_name = ps.enriched_album.as_deref();
+            state.discord_rpc.update_presence(station, metadata, enriched, album_name);
+        }
 
         events::emit_status(&app, PlaybackStatus::Playing);
         Ok(())

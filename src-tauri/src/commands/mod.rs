@@ -5,6 +5,7 @@
 mod backup;
 mod browser;
 mod custom_stations;
+mod discord_cmd;
 mod eq;
 mod favicon;
 mod player;
@@ -45,6 +46,7 @@ pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
 pub use self::backup::*;
 pub use self::browser::*;
 pub use self::custom_stations::*;
+pub use self::discord_cmd::*;
 pub use self::eq::*;
 pub use self::favicon::*;
 pub use self::player::*;
