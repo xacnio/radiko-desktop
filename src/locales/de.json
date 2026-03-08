@@ -208,9 +208,12 @@
         "outputDevice": "Audio-Ausgabegerät",
         "outputDeviceDesc": "Wählen Sie das Gerät zur Tonwiedergabe aus",
         "defaultDevice": "Standardgerät",
+        "audioDeviceChanged": "Audio-Ausgabegerät geändert",
         "skipAds": "HLS-Werbung überspringen",
         "skipAdsDesc": "Überspringt automatisch Werbesegmente in HLS (m3u8)-Streams.",
-        "skipAdsWarning": "Hinweis: Funktioniert möglicherweise nicht für jeden Radiosender."
+        "skipAdsWarning": "Hinweis: Funktioniert möglicherweise nicht für jeden Radiosender.",
+        "discordRpc": "Discord Rich Presence",
+        "discordRpcDesc": "Zeigen Sie auf Discord, was Sie hören"
     },
     "ctx": {
         "play": "Abspielen",

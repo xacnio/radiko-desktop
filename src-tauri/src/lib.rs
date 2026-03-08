@@ -52,7 +52,15 @@ pub fn run() {
             let proxy_state = proxy::start_proxy(app.handle().clone());
             let port = proxy_state.port;
 
-            let mut state = AppState::new(settings.volume, settings.last_url, settings.minimize_to_tray, settings.close_to_tray, settings.output_device, settings.skip_ads);
+            let mut state = AppState::new(
+                settings.volume,
+                settings.last_url,
+                settings.minimize_to_tray,
+                settings.close_to_tray,
+                settings.output_device,
+                settings.skip_ads,
+                settings.discord_rpc
+            );
             state.proxy_port = port;
             app.manage(state);
 
@@ -72,6 +80,23 @@ pub fn run() {
             // 8. TRAY ICON
             if let Err(e) = setup::setup_tray(app) {
                 tracing::error!("Failed to initialize tray: {}", e);
+            }
+
+            // 9. AUDIO DEVICE MONITOR (Windows only)
+            #[cfg(target_os = "windows")]
+            {
+                let monitor = std::sync::Arc::new(player::device_monitor::DeviceMonitor::new(app.handle().clone()));
+                let monitor_clone = std::sync::Arc::clone(&monitor);
+                tauri::async_runtime::spawn(async move {
+                    monitor_clone.start().await;
+                });
+            }
+
+            // 10. DISCORD RPC INITIALIZATION
+            if let Some(app_state) = app.try_state::<AppState>() {
+                if app_state.discord_rpc.is_enabled() {
+                    let _ = app_state.discord_rpc.connect();
+                }
             }
 
             Ok(())
@@ -149,6 +174,9 @@ pub fn run() {
             commands::save_skip_ads,
             commands::get_audio_devices,
             commands::set_audio_device,
+            commands::restart_on_device_change,
+            commands::set_discord_rpc,
+            commands::get_discord_rpc_status,
             commands::export_backup,
             commands::import_backup,
             commands::analyze_backup,

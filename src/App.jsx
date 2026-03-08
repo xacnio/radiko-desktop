@@ -116,10 +116,15 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
     const [minimizeToTray, setMinimizeToTray] = useState(() => localStorage.getItem('minimize_to_tray') !== 'false');
     const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem('close_to_tray') !== 'false');
     const [skipAds, setSkipAds] = useState(() => localStorage.getItem('skip_ads') !== 'false');
+    const [discordRpc, setDiscordRpc] = useState(() => localStorage.getItem('discord_rpc') === 'true');
 
     useEffect(() => {
         localStorage.setItem('skip_ads', skipAds);
     }, [skipAds]);
+
+    useEffect(() => {
+        localStorage.setItem('discord_rpc', discordRpc);
+    }, [discordRpc]);
 
     useEffect(() => {
         localStorage.setItem('minimize_to_tray', minimizeToTray);
@@ -256,6 +261,55 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
         const timerId = setTimeout(initAutoUpdate, 100);
         return () => clearTimeout(timerId);
     }, [notify, t, setTab]);
+
+    // --- Audio Device Change Listener (Windows only) ---
+    const lastDeviceChangeRef = useRef(null);
+    
+    useEffect(() => {
+        let unlisten;
+        
+        const setupListener = async () => {
+            try {
+                unlisten = await listen('audio-device-changed', async (event) => {
+                    console.log('Default audio device changed:', event.payload);
+                    
+                    // Debounce: Only process if at least 2 seconds passed since last change
+                    const now = Date.now();
+                    if (lastDeviceChangeRef.current && (now - lastDeviceChangeRef.current) < 2000) {
+                        console.log('Device change debounced (frontend)');
+                        return;
+                    }
+                    lastDeviceChangeRef.current = now;
+                    
+                    // Check if using default device
+                    try {
+                        const settings = await invoke('get_settings');
+                        if (!settings.output_device || settings.output_device === '') {
+                            await invoke('restart_on_device_change');
+                            notify({
+                                type: 'info',
+                                title: t('settings.audioDeviceChanged') || 'Audio Device Changed',
+                                message: event.payload,
+                                duration: 3000
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Failed to handle device change:', err);
+                    }
+                });
+            } catch (err) {
+                console.error('Failed to setup device listener:', err);
+            }
+        };
+        
+        setupListener();
+        
+        return () => {
+            if (unlisten && typeof unlisten === 'function') {
+                unlisten();
+            }
+        };
+    }, [notify, t]);
 
     const [streamMetadata, setStreamMetadata] = useState(null);
     const [volume, setVolume] = useState(100);
@@ -1391,6 +1445,8 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                             setCloseToTray={setCloseToTray}
                             skipAds={skipAds}
                             setSkipAds={setSkipAds}
+                            discordRpc={discordRpc}
+                            setDiscordRpc={setDiscordRpc}
                         />
                     ) : (
                         <StationList

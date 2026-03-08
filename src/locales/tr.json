@@ -208,9 +208,12 @@
         "outputDevice": "Ses Çıkış Cihazı",
         "outputDeviceDesc": "Uygulamanın ses vereceği cihazı seçin",
         "defaultDevice": "Varsayılan Cihaz",
+        "audioDeviceChanged": "Ses çıkış cihazı değişti",
         "skipAds": "HLS Reklamlarını Atla",
         "skipAdsDesc": "HLS (m3u8) yayınlarındaki reklam bölümlerini otomatik olarak atlar.",
-        "skipAdsWarning": "Not: Her radyo istasyonu için çalışmayabilir."
+        "skipAdsWarning": "Not: Her radyo istasyonu için çalışmayabilir.",
+        "discordRpc": "Discord Rich Presence",
+        "discordRpcDesc": "Discord'da ne dinlediğinizi gösterin"
     },
     "ctx": {
         "play": "Çal",

@@ -208,9 +208,12 @@
         "outputDevice": "Audio Output Device",
         "outputDeviceDesc": "Select the device to play sound from",
         "defaultDevice": "Default Device",
+        "audioDeviceChanged": "Audio output device changed",
         "skipAds": "Skip HLS Ads",
         "skipAdsDesc": "Automatically skip ad segments in HLS (m3u8) streams.",
-        "skipAdsWarning": "Note: May not work for every radio station."
+        "skipAdsWarning": "Note: May not work for every radio station.",
+        "discordRpc": "Discord Rich Presence",
+        "discordRpcDesc": "Show what you're listening to on Discord"
     },
     "ctx": {
         "play": "Play",

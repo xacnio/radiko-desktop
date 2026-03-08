@@ -188,6 +188,62 @@ pub async fn set_audio_device(
     Ok(())
 }
 
+/// Restart playback on the current device (used when default device changes on Windows).
+/// Only restarts if "Default Device" (None) is selected and something is playing.
+#[tauri::command]
+pub async fn restart_on_device_change(
+    app: AppHandle,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<(), AppError> {
+    // Debounce: Check if we restarted recently (within last 2 seconds)
+    {
+        let mut last_restart = state.last_device_restart.lock().unwrap();
+        let now = std::time::Instant::now();
+        
+        if let Some(last) = *last_restart {
+            if now.duration_since(last) < std::time::Duration::from_secs(2) {
+                tracing::info!("Device restart debounced (too soon)");
+                return Ok(());
+            }
+        }
+        
+        *last_restart = Some(now);
+    }
+    
+    let (should_restart, url, station_name, station_image) = {
+        let inner = state.inner.lock().unwrap();
+        
+        // Only restart if using default device (None)
+        let using_default = inner.output_device.is_none();
+        
+        let playing = inner.status == crate::player::types::PlaybackStatus::Playing 
+            || inner.status == crate::player::types::PlaybackStatus::Connecting
+            || inner.status == crate::player::types::PlaybackStatus::Reconnecting;
+            
+        (
+            using_default && playing,
+            inner.current_url.clone(),
+            inner.station_name.clone(),
+            inner.station_image.clone()
+        )
+    };
+
+    if should_restart {
+        if let Some(target_url) = url {
+            tracing::info!("Default audio device changed, restarting playback");
+            crate::commands::play(
+                target_url,
+                station_name,
+                station_image,
+                app.clone(),
+                state,
+            ).await?;
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn open_browser_url(url: String) -> Result<(), AppError> {
     #[cfg(target_os = "windows")]
