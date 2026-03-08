@@ -156,7 +156,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: src-tauri/Cargo.lock
-          key: cargo-lock-${{ matrix.cache-key }}-${{ hashFiles('src-tauri/Cargo.toml') }}
+          key: cargo-lock-${{ matrix.cache-key }}-${{ hashFiles('src-tauri/Cargo.toml', 'package.json') }}
       - name: Generate Cargo.lock
         if: steps.cargo-lock-cache.outputs.cache-hit != 'true'
         run: cargo generate-lockfile
