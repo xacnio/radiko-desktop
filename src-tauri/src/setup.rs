@@ -140,7 +140,7 @@ pub fn setup_html_splash(app: &mut App, theme: Option<&str>) {
 
 /// Initialises OS media transport controls (Windows SMTC or macOS Now Playing) and event listeners.
 pub fn setup_os_media_controls(app: &App) {
-    let window = app.get_window("main");
+    let window = app.get_webview_window("main");
     #[allow(unused_variables)]
     if let Some(window) = window.clone() {
         #[cfg(target_os = "windows")]
@@ -179,18 +179,47 @@ pub fn setup_os_media_controls(app: &App) {
         }
 
         let win_clone = window.clone();
+        
+        // macOS: Use native NSWindowWillMiniaturizeNotification instead of polling
+        #[cfg(target_os = "macos")]
+        {
+            let app_handle = app.handle().clone();
+            // Small delay to ensure the window is fully initialized
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                crate::platform::macos::register_miniaturize_observer(&app_handle);
+                crate::platform::macos::register_default_device_listener(app_handle);
+                tracing::info!("macOS observers registered");
+            });
+        }
+        
         window.on_window_event(move |event| match event {
             tauri::WindowEvent::Resized(_) => {
-                if let Ok(is_min) = win_clone.is_minimized() {
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let win = win_clone.clone();
+                    let is_min = win.is_minimized().unwrap_or(false);
+                    
                     if is_min {
-                        let state = win_clone.state::<crate::state::AppState>();
+                        let state = win.state::<crate::state::AppState>();
                         let minimize_to_tray = state.inner.lock().unwrap().minimize_to_tray;
+                        
                         if minimize_to_tray {
-                            let _ = win_clone.hide();
+                            tracing::info!("Window minimized, hiding to tray");
+                            let _ = win.hide();
                         }
                     }
                 }
                 crate::commands::internal_layout_link_view(&win_clone);
+            }
+            tauri::WindowEvent::Focused(focused) => {
+                // When window gains focus, restore Regular policy on macOS
+                // so it appears in Dock and Cmd+Tab
+                #[cfg(target_os = "macos")]
+                if *focused && win_clone.is_visible().unwrap_or(false) {
+                    tracing::info!("Window focused, setting Regular policy");
+                    let _ = win_clone.app_handle().set_activation_policy(tauri::ActivationPolicy::Regular);
+                }
             }
             tauri::WindowEvent::ScaleFactorChanged { .. } => {
                 crate::commands::internal_layout_link_view(&win_clone);
@@ -200,23 +229,19 @@ pub fn setup_os_media_controls(app: &App) {
                 let close_to_tray = state.inner.lock().unwrap().close_to_tray;
 
                 if close_to_tray {
+                    tracing::info!("DEBUG: Close requested, hiding to tray");
+                    #[cfg(target_os = "macos")]
+                    let _ = win_clone.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
                     let _ = win_clone.hide();
                     api.prevent_close();
                 } else {
-                    // Force hide for instant feedback
                     let _ = win_clone.hide();
-                    
                     let handle = win_clone.app_handle().clone();
                     tauri::async_runtime::spawn(async move {
-                        // 1. Destroy all windows to clear WebView2 classes
                         for win in handle.webview_windows().values() {
                             let _ = win.destroy();
                         }
-                        
-                        // 2. Short delay for OS to process the destruction
                         tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-                        
-                        // 3. Final exit
                         handle.exit(0);
                     });
                     api.prevent_close();
@@ -232,7 +257,7 @@ pub fn await_frontend_and_close_splash(
     app_handle: tauri::AppHandle,
     splash_handle: Option<platform::splash::SplashScreen>,
 ) {
-    let poll_win = app_handle.get_window("main");
+    let poll_win = app_handle.get_webview_window("main");
     if poll_win.is_none() {
         if let Some(s) = splash_handle {
             s.close();
@@ -410,7 +435,7 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(target_os = "windows"))]
     _tray_win.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(focused) => {
-            if !focused {
+            if !*focused {
                 #[cfg(target_os = "linux")]
                 {
                     tracing::info!("Tray Window: Lost focus, waiting before hiding...");
@@ -528,6 +553,8 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 "show" => {
                     println!("TRAY: 'show' menu item clicked");
                     if let Some(window) = app.get_webview_window("main") {
+                        #[cfg(target_os = "macos")]
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                         let _ = window.unminimize();
                         let _ = window.show();
                         let _ = window.set_focus();
@@ -724,7 +751,14 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                         
                         if is_visible && !is_minimized {
                             let _ = main.hide();
+                            #[cfg(target_os = "macos")]
+                            let _ = tray.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
                         } else {
+                            #[cfg(target_os = "macos")]
+                            {
+                                tracing::info!("Tray double-click: showing window, setting Regular policy");
+                                let _ = tray.app_handle().set_activation_policy(tauri::ActivationPolicy::Regular);
+                            }
                             if is_minimized {
                                 let _ = main.unminimize();
                             }

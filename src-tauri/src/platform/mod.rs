@@ -11,3 +11,6 @@ pub mod thumbbar;
 
 #[cfg(target_os = "windows")]
 pub mod mouse_hook;
+
+#[cfg(target_os = "macos")]
+pub mod macos;
