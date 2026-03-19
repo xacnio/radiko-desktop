@@ -62,7 +62,7 @@ pub async fn start(
     volume: f32,
     app_handle: AppHandle,
     emit_events: bool,
-    output_device: Option<String>,
+    _output_device: Option<String>,
     skip_ads: bool,
 ) -> Result<PlayerHandle, AppError> {
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -80,42 +80,49 @@ pub async fn start(
     let decode_thread = std::thread::Builder::new()
         .name("radio-decode".into())
         .spawn(move || {
-            // Find custom device or fallback to default
-            let mut selected_device = None;
-            if let Some(dev_name) = &output_device {
-                use rodio::cpal::traits::{HostTrait, DeviceTrait};
-                let host = rodio::cpal::default_host();
-                if let Ok(devices) = host.output_devices() {
-                    for d in devices {
-                        if let Ok(name) = d.name() {
-                            if name == *dev_name {
-                                selected_device = Some(d);
-                                break;
+            // Create audio output on this thread.
+            // OutputStream is !Send — it must stay on this thread for its lifetime.
+            let (_output_stream, stream_handle) = {
+                #[cfg(not(target_os = "macos"))]
+                {
+                    use rodio::cpal::traits::{HostTrait, DeviceTrait};
+                    let mut selected = None;
+                    if let Some(dev_name) = output_device.as_deref() {
+                        'outer: for host_id in rodio::cpal::available_hosts() {
+                            if let Ok(host) = rodio::cpal::host_from_id(host_id) {
+                                if let Ok(devices) = host.output_devices() {
+                                    for d in devices {
+                                        if let Ok(name) = d.name() {
+                                            if name == dev_name {
+                                                selected = Some(d);
+                                                break 'outer;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
+                        if selected.is_none() {
+                            tracing::warn!("Device '{}' not found, falling back to default", dev_name);
+                        }
+                    }
+                    match selected {
+                        Some(ref device) => rodio::OutputStream::try_from_device(device)
+                            .unwrap_or_else(|e| {
+                                tracing::error!("Custom audio output error: {}, falling back to default", e);
+                                OutputStream::try_default().expect("no audio output device")
+                            }),
+                        None => match OutputStream::try_default() {
+                            Ok(v) => v,
+                            Err(e) => { let _ = sink_tx.send(Err(format!("Audio output error: {}", e))); return; }
+                        },
                     }
                 }
-            }
 
-            // Create audio output on this thread
-            let (_output_stream, stream_handle) = match selected_device {
-                Some(device) => {
-                    match OutputStream::try_from_device(&device) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            let _ = sink_tx.send(Err(format!("Custom audio output error: {}", e)));
-                            return;
-                        }
-                    }
-                }
-                None => {
-                    match OutputStream::try_default() {
-                        Ok(v) => v,
-                        Err(e) => {
-                            let _ = sink_tx.send(Err(format!("Audio output error: {}", e)));
-                            return;
-                        }
-                    }
+                #[cfg(target_os = "macos")]
+                match OutputStream::try_default() {
+                    Ok(v) => v,
+                    Err(e) => { let _ = sink_tx.send(Err(format!("Audio output error: {}", e))); return; }
                 }
             };
 

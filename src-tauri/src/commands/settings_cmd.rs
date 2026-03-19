@@ -124,20 +124,24 @@ pub fn save_skip_ads(app: AppHandle, skip_ads: bool) -> Result<(), AppError> {
 #[tauri::command]
 pub fn get_audio_devices() -> Result<Vec<String>, AppError> {
     use rodio::cpal::traits::{DeviceTrait, HostTrait};
-    let host = rodio::cpal::default_host();
-    
+
     let mut devices = Vec::new();
-    match host.output_devices() {
-        Ok(output_devices) => {
-            for device in output_devices {
-                if let Ok(name) = device.name() {
-                    devices.push(name);
+    let mut seen = std::collections::HashSet::new();
+
+    for host_id in rodio::cpal::available_hosts() {
+        if let Ok(host) = rodio::cpal::host_from_id(host_id) {
+            if let Ok(output_devices) = host.output_devices() {
+                for device in output_devices {
+                    if let Ok(name) = device.name() {
+                        if seen.insert(name.clone()) {
+                            devices.push(name);
+                        }
+                    }
                 }
             }
         }
-        Err(e) => return Err(AppError::AudioOutput(format!("Failed to enumerate output devices: {}", e))),
-    };
-    
+    }
+
     Ok(devices)
 }
 

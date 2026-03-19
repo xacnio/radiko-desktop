@@ -102,15 +102,20 @@ export default function SettingsView({
     // Audio devices
     const [audioDevices, setAudioDevices] = useState([]);
     const [selectedDevice, setSelectedDevice] = useState('');
+    const [currentOs, setCurrentOs] = useState('');
 
     useEffect(() => {
-        if (activeTab === 'general') {
+        invoke('get_os').then(setCurrentOs).catch(console.error);
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === 'general' && currentOs !== 'macos') {
             invoke('get_audio_devices').then(setAudioDevices).catch(console.error);
             invoke('get_settings').then(s => {
-                setSelectedDevice(s.output_device || '');
+                setSelectedDevice(s.outputDevice || '');
             }).catch(console.error);
         }
-    }, [activeTab]);
+    }, [activeTab, currentOs]);
 
     useEffect(() => {
         getAppVersion().then(setAppVersion).catch(console.error);
@@ -365,6 +370,7 @@ export default function SettingsView({
                                 </div>
                             </div>
 
+                            {currentOs !== 'macos' && (
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-4 border-t border-border/30">
                                 <div className="space-y-1">
                                     <h4 className="text-sm font-bold text-text-primary">{t('settings.outputDevice') || 'Audio Output Device'}</h4>
@@ -390,6 +396,7 @@ export default function SettingsView({
                                     </div>
                                 </div>
                             </div>
+                            )}
 
                             <div className="flex flex-col gap-4 pt-4 border-t border-border/30">
                                 <div className="space-y-1">
