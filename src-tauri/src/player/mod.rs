@@ -62,7 +62,8 @@ pub async fn start(
     volume: f32,
     app_handle: AppHandle,
     emit_events: bool,
-    _output_device: Option<String>,
+    #[cfg(not(target_os = "macos"))] output_device: Option<String>,
+    #[cfg(target_os = "macos")] _output_device: Option<String>,
     skip_ads: bool,
 ) -> Result<PlayerHandle, AppError> {
     let shutdown = Arc::new(AtomicBool::new(false));
