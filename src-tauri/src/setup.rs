@@ -627,6 +627,7 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 } if button == MouseButton::Left && (cfg!(target_os = "linux") || button_state == MouseButtonState::Up) => {
                     #[cfg(target_os = "windows")]
                     {
+                        let _ = position;
                         let last_hide = crate::platform::mouse_hook::LAST_HIDE_TIME.load(std::sync::atomic::Ordering::SeqCst);
                         let now = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)

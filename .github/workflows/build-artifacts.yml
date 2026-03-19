@@ -97,7 +97,7 @@ jobs:
         if: ${{ matrix.cache-key == 'linux-x64' && (github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target) }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
       - name: Install Linux cross-compile dependencies (arm64)
         if: ${{ matrix.cache-key == 'linux-arm64' && (github.event.inputs.os_target == 'all' || matrix.group_name == github.event.inputs.os_target) }}
         run: |
@@ -108,7 +108,7 @@ jobs:
           # Restrict existing sources to amd64 only
           sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu patchelf \
+          sudo apt-get install -y build-essential pkg-config libssl-dev libssl-dev:arm64 gcc-aarch64-linux-gnu g++-aarch64-linux-gnu patchelf \
             libgtk-3-dev:arm64 libwebkit2gtk-4.1-dev:arm64 libappindicator3-dev:arm64 \
             librsvg2-dev:arm64 libasound2-dev:arm64
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
