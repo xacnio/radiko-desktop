@@ -427,6 +427,16 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     };
 
     // 1. Create the base native Window (no decorations, no default webview)
+    #[cfg(not(target_os = "macos"))]
+    let win_builder = WindowBuilder::new(&app, "radio-browser-window")
+        .title("Radiko Browser")
+        .inner_size(1200.0, 700.0)
+        .decorations(false)
+        .resizable(true)
+        .shadow(true)
+        .background_color(bg.into());
+
+    #[cfg(target_os = "macos")]
     let mut win_builder = WindowBuilder::new(&app, "radio-browser-window")
         .title("Radiko Browser")
         .inner_size(1200.0, 700.0)
@@ -502,6 +512,28 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     let toolbar_abs_y = win_pos.y;
     let toolbar_w = size.width;
 
+    #[cfg(not(target_os = "macos"))]
+    let tb_builder = WebviewWindowBuilder::new(
+        &app,
+        "toolbar-view",
+        WebviewUrl::App("/browser-toolbar.html".into()),
+    )
+    .decorations(false)
+    .resizable(false)
+    .shadow(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .background_color(bg.into())
+    .inner_size(
+        toolbar_w as f64 / sf,
+        toolbar_h_log,
+    )
+    .position(
+        toolbar_abs_x as f64 / sf,
+        toolbar_abs_y as f64 / sf,
+    );
+
+    #[cfg(target_os = "macos")]
     let mut tb_builder = WebviewWindowBuilder::new(
         &app,
         "toolbar-view",
@@ -817,19 +849,9 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     // 7. Initial Layout Pass (Immediate + Delayed for stability)
     layout_with_sidebar(&window, &app);
 
-    // When browser window is focused, bring toolbar window to front too
-    {
-        let app_focus = app.clone();
-        let tb_win = _toolbar_win.clone();
-        let _ = tb_win.clone().on_window_event(move |event| {
-            // If toolbar is focused, refocus the browser window instead
-            if let tauri::WindowEvent::Focused(true) = event {
-                if let Some(bw) = app_focus.get_webview_window("radio-browser-window") {
-                    let _ = bw.set_focus();
-                }
-            }
-        });
-    }
+    // Do not force focus back to the parent on macOS.
+    // The toolbar is an attached child window there, and stealing focus back after
+    // traffic-light interactions can leave the toolbar feeling laggy/unresponsive.
 
     let window_init = window.clone();
     let app_init = app.clone();
@@ -876,24 +898,16 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
 #[tauri::command]
 pub fn minimize_browser_window(app: tauri::AppHandle) {
     use tauri::Manager;
-    
-    // Minimize browser window — toolbar will minimize automatically on macOS (child window)
+
     if let Some(window) = app.get_window("radio-browser-window") {
         let _ = window.minimize();
-    }
-    
-    // On non-macOS, explicitly hide toolbar
-    #[cfg(not(target_os = "macos"))]
-    {
-        if let Some(tb) = app.get_webview_window("toolbar-view") {
-            let _ = tb.hide();
-        }
     }
 }
 
 #[tauri::command]
 pub fn maximize_browser_window(app: tauri::AppHandle) {
     use tauri::Manager;
+
     if let Some(window) = app.get_window("radio-browser-window") {
         if let Ok(is_maximized) = window.is_maximized() {
             if is_maximized {
@@ -902,6 +916,9 @@ pub fn maximize_browser_window(app: tauri::AppHandle) {
                 let _ = window.maximize();
             }
         }
+
+        let _ = window.unminimize();
+        let _ = window.set_focus();
     }
 }
 
