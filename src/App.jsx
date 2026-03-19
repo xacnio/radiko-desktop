@@ -19,6 +19,7 @@ import { NotificationProvider, useNotification } from './contexts/NotificationPr
 import { useTranslation } from 'react-i18next';
 import { availableLanguages } from './i18n';
 import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 import TrayPlayer from './components/player/TrayPlayer';
 
@@ -1347,7 +1348,6 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
                     // Relaunch app after a brief delay so the user sees the notification
                     setTimeout(async () => {
                         try {
-                            const { relaunch } = await import('@tauri-apps/plugin-process');
                             await relaunch();
                         } catch {
                             window.location.reload();

@@ -389,18 +389,21 @@ pub fn close_browser_window(app: tauri::AppHandle) {
 
 #[tauri::command]
 pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
-    use tauri::{Manager, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, WindowBuilder};
-
     #[cfg(target_os = "linux")]
     {
+        let _ = app;
         return Err(AppError::Settings("LINUX_NOT_SUPPORTED_YET".to_string()));
     }
 
-    // Check if the window is already open
-    if let Some(win) = app.get_window("radio-browser-window") {
-        let _ = win.set_focus();
-        return Ok(());
-    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        use tauri::{Manager, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, WindowBuilder};
+
+        // Check if the window is already open
+        if let Some(win) = app.get_window("radio-browser-window") {
+            let _ = win.set_focus();
+            return Ok(());
+        }
 
     // Determine theme from settings
     let data_dir = app
@@ -891,7 +894,8 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
         _ => {}
     });
 
-    Ok(())
+        Ok(())
+    }
 }
 
 
