@@ -10,7 +10,7 @@ use super::scraping::scrape_radio_url_internal;
 
 static LINK_VIEW_WIDTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(400);
 
-pub fn internal_layout_link_view(w: &tauri::Window) {
+pub fn internal_layout_link_view(w: &tauri::WebviewWindow) {
     use tauri::Manager;
     if let Some(lv) = w.get_webview("link-view") {
         let sf = w.scale_factor().unwrap_or(1.0);
@@ -40,7 +40,7 @@ pub fn internal_layout_link_view(w: &tauri::Window) {
 pub fn update_link_view_width(app: tauri::AppHandle, width: u32) {
     use tauri::Manager;
     LINK_VIEW_WIDTH.store(width, std::sync::atomic::Ordering::Relaxed);
-    if let Some(main_win) = app.get_window("main") {
+    if let Some(main_win) = app.get_webview_window("main") {
         internal_layout_link_view(&main_win);
     } else {
         println!("UPDATE_WIDTH: ERROR - Main window not found!");
@@ -287,51 +287,72 @@ pub async fn probe_and_add_stream_from_js(
 #[tauri::command]
 pub fn browser_back(app: tauri::AppHandle) {
     use tauri::Manager;
-    if let Some(w) = app.get_webview("browser-view") {
-        let _ = w.eval("history.back();");
+    if let Some(parent) = app.get_window("radio-browser-window") {
+        if let Some(w) = parent.get_webview("browser-view") {
+            let _ = w.eval("history.back();");
+        }
     }
 }
 
 #[tauri::command]
 pub fn browser_forward(app: tauri::AppHandle) {
     use tauri::Manager;
-    if let Some(w) = app.get_webview("browser-view") {
-        let _ = w.eval("history.forward();");
+    if let Some(parent) = app.get_window("radio-browser-window") {
+        if let Some(w) = parent.get_webview("browser-view") {
+            let _ = w.eval("history.forward();");
+        }
     }
 }
 
 #[tauri::command]
 pub fn browser_reload(app: tauri::AppHandle) {
     use tauri::Manager;
-    if let Some(w) = app.get_webview("browser-view") {
-        let _ = w.eval("location.reload();");
+    if let Some(parent) = app.get_window("radio-browser-window") {
+        if let Some(w) = parent.get_webview("browser-view") {
+            let _ = w.eval("location.reload();");
+        }
     }
 }
 
 #[tauri::command]
 pub fn browser_stop(app: tauri::AppHandle) {
     use tauri::Manager;
-    if let Some(w) = app.get_webview("browser-view") {
-        let _ = w.eval("window.stop();");
+    if let Some(parent) = app.get_window("radio-browser-window") {
+        if let Some(w) = parent.get_webview("browser-view") {
+            let _ = w.eval("window.stop();");
+        }
     }
 }
 
 #[tauri::command]
 pub fn browser_navigate(app: tauri::AppHandle, url: String) {
     use tauri::Manager;
-    if let Some(w) = app.get_webview("browser-view") {
-        let nav_js = format!("location.href = '{}';", url.replace("'", "\\'"));
-        let _ = w.eval(&nav_js);
+    if let Some(parent) = app.get_window("radio-browser-window") {
+        if let Some(w) = parent.get_webview("browser-view") {
+            let nav_js = format!("location.href = '{}';", url.replace("'", "\\'"));
+            let _ = w.eval(&nav_js);
+        }
     }
 }
 
 #[tauri::command]
 pub async fn browser_get_url(app: tauri::AppHandle) -> Result<String, String> {
     use tauri::Manager;
+    
+    // browser-view is a child webview of radio-browser-window
+    if let Some(parent_win) = app.get_window("radio-browser-window") {
+        if let Some(w) = parent_win.get_webview("browser-view") {
+            let url = w.url().map_or(String::new(), |u| u.to_string());
+            return Ok(url);
+        }
+    }
+    
+    // Fallback: try global search
     if let Some(w) = app.get_webview("browser-view") {
         let url = w.url().map_or(String::new(), |u| u.to_string());
         Ok(url)
     } else {
+        tracing::warn!("browser_get_url: browser-view not found");
         Err("Browser view not found".to_string())
     }
 }
@@ -339,18 +360,36 @@ pub async fn browser_get_url(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub fn close_browser_window(app: tauri::AppHandle) {
     use tauri::Manager;
+    
+    tracing::info!("close_browser_window called");
+    
+    // Close browser window first (it's a Window, not WebviewWindow)
+    if let Some(w) = app.get_window("radio-browser-window") {
+        tracing::info!("Closing radio-browser-window");
+        let _ = w.close();
+    } else {
+        tracing::warn!("radio-browser-window not found!");
+    }
+    
+    // Explicitly close toolbar window (in case it didn't close automatically)
+    if let Some(tb) = app.get_webview_window("toolbar-view") {
+        tracing::info!("Closing toolbar-view");
+        let _ = tb.close();
+    } else {
+        tracing::warn!("toolbar-view not found!");
+    }
+    
+    // Focus main window
     if let Some(main) = app.get_webview_window("main") {
+        tracing::info!("Focusing main window");
         let _ = main.set_focus();
         let _ = main.unminimize();
-    }
-    if let Some(w) = app.get_window("radio-browser-window") {
-        let _ = w.close();
     }
 }
 
 #[tauri::command]
 pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
-    use tauri::{Manager, WebviewBuilder, WebviewUrl, WindowBuilder};
+    use tauri::{Manager, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, WindowBuilder};
 
     #[cfg(target_os = "linux")]
     {
@@ -371,17 +410,14 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     let settings = crate::settings::Settings::load(&data_dir);
     let theme_str = settings.theme.unwrap_or_else(|| "system".to_string());
 
-    // Determine if the app is currently in light mode
     let is_light = match theme_str.as_str() {
         "light" => true,
         "dark" => false,
-        _ => {
-            // "system" — check actual system theme
-            app.get_window("main")
-                .and_then(|w| w.theme().ok())
-                .map(|t| matches!(t, tauri::Theme::Light))
-                .unwrap_or(false)
-        }
+        _ => app
+            .get_webview_window("main")
+            .and_then(|w| w.theme().ok())
+            .map(|t| matches!(t, tauri::Theme::Light))
+            .unwrap_or(false),
     };
 
     let bg = if is_light {
@@ -390,30 +426,64 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
         (17u8, 17u8, 17u8, 255u8)
     };
 
-    // 1. Create the base native Window
-    let window = WindowBuilder::new(&app, "radio-browser-window")
+    // 1. Create the base native Window (no decorations, no default webview)
+    let mut win_builder = WindowBuilder::new(&app, "radio-browser-window")
         .title("Radiko Browser")
         .inner_size(1200.0, 700.0)
-        .decorations(false) // Frameless for premium look
-        .resizable(true)    // Enable resizing
-        .shadow(true)      // Helps some Linux environments with hit testing
-        .background_color(bg.into())
+        .decorations(false)
+        .resizable(true)
+        .shadow(true)
+        .background_color(bg.into());
+
+    #[cfg(target_os = "macos")]
+    {
+        win_builder = win_builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let window = win_builder
         .build()
         .map_err(|e: tauri::Error| AppError::Settings(e.to_string()))?;
 
+    // macOS: hide native traffic lights
+    #[cfg(target_os = "macos")]
+    {
+        use objc::{msg_send, sel, sel_impl, runtime::Object};
+        let win_for_lights = window.clone();
+        let _ = win_for_lights.clone().run_on_main_thread(move || {
+            if let Ok(ptr) = win_for_lights.ns_window() {
+                let ns_win = ptr as *mut Object;
+                unsafe {
+                    for btn_type in [0u64, 1u64, 2u64] {
+                        let btn: *mut Object = msg_send![ns_win, standardWindowButton: btn_type];
+                        if !btn.is_null() {
+                            let _: () = msg_send![btn, setHidden: objc::runtime::YES];
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     // Fixed Layout Constants (Logical)
-    let sidebar_w_log = 260.0;
-    let toolbar_h_log = 70.0;
+    let sidebar_w_log = 260.0_f64;
+    let toolbar_h_log = 70.0_f64;
 
     let sf = window.scale_factor().unwrap_or(1.0);
     let size = window
         .inner_size()
         .unwrap_or(tauri::PhysicalSize::new(1200, 700));
 
-    let sidebar_w_phys = (sidebar_w_log * sf) as u32;
-    let toolbar_h_phys = (toolbar_h_log * sf) as u32;
+    let sidebar_w_phys = (sidebar_w_log * sf).round() as u32;
+    let toolbar_h_phys = (toolbar_h_log * sf).round() as u32;
 
-    // 2. Add Loading overlay FIRST
+    // Get absolute window position for child window positioning
+    let win_pos = window
+        .outer_position()
+        .unwrap_or(tauri::PhysicalPosition::new(0, 0));
+
+    // 2. Add Loading overlay (child webview — no IPC needed)
     let _loading_view = window
         .add_child(
             WebviewBuilder::new(
@@ -426,18 +496,76 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
         )
         .map_err(|e: tauri::Error| AppError::Settings(e.to_string()))?;
 
-    // 3. Add Toolbar Webview
-    let _toolbar_view = window
-        .add_child(
-            WebviewBuilder::new(
-                "toolbar-view",
-                WebviewUrl::App("/browser-toolbar.html".into()),
-            )
-            .background_color(bg.into()),
-            tauri::PhysicalPosition::new(0, 0),
-            tauri::PhysicalSize::new(size.width, toolbar_h_phys),
-        )
-        .map_err(|e: tauri::Error| AppError::Settings(e.to_string()))?;
+    // 3. Toolbar as a proper WebviewWindow so it gets Tauri IPC injected
+    //    Position it absolutely over the parent window's toolbar area
+    let toolbar_abs_x = win_pos.x;
+    let toolbar_abs_y = win_pos.y;
+    let toolbar_w = size.width;
+
+    let mut tb_builder = WebviewWindowBuilder::new(
+        &app,
+        "toolbar-view",
+        WebviewUrl::App("/browser-toolbar.html".into()),
+    )
+    .decorations(false)
+    .resizable(false)
+    .shadow(false)
+    .always_on_top(false)
+    .skip_taskbar(true)
+    .background_color(bg.into())
+    .inner_size(
+        toolbar_w as f64 / sf,
+        toolbar_h_log,
+    )
+    .position(
+        toolbar_abs_x as f64 / sf,
+        toolbar_abs_y as f64 / sf,
+    );
+
+    #[cfg(target_os = "macos")]
+    {
+        tb_builder = tb_builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let _toolbar_win = tb_builder
+        .build()
+        .map_err(|e: tauri::Error| {
+            tracing::error!("Failed to create toolbar window: {}", e);
+            AppError::Settings(e.to_string())
+        })?;
+    
+    tracing::info!("Toolbar window created successfully");
+
+    // macOS: hide toolbar window's native traffic lights too
+    // AND attach toolbar as child window of browser window so it moves/minimizes together
+    #[cfg(target_os = "macos")]
+    {
+        use objc::{msg_send, sel, sel_impl, runtime::Object};
+        let tb_win = _toolbar_win.clone();
+        let parent_win = window.clone();
+        let _ = tb_win.clone().run_on_main_thread(move || {
+            // Hide traffic lights on toolbar window
+            if let Ok(ptr) = tb_win.ns_window() {
+                let ns_tb = ptr as *mut Object;
+                unsafe {
+                    for btn_type in [0u64, 1u64, 2u64] {
+                        let btn: *mut Object = msg_send![ns_tb, standardWindowButton: btn_type];
+                        if !btn.is_null() {
+                            let _: () = msg_send![btn, setHidden: objc::runtime::YES];
+                        }
+                    }
+                    // Attach toolbar as child of browser window
+                    // NSWindowOrderingMode: NSWindowAbove = 1
+                    if let Ok(parent_ptr) = parent_win.ns_window() {
+                        let ns_parent = parent_ptr as *mut Object;
+                        let _: () = msg_send![ns_parent, addChildWindow: ns_tb ordered: 1i64];
+                    }
+                }
+            }
+        });
+    }
 
     // Scanner for capturing streams
     let passive_scanner_js = r#"
@@ -652,68 +780,34 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
         });
     }
 
-    // 6. macOS: Force DevTools to open in a SEPARATE WINDOW
-    #[cfg(target_os = "macos")]
-    {
-        let w_detach = window.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-            let _ = w_detach.run_on_main_thread(move || {
-                use objc::runtime::Object;
-                use objc::{class, msg_send, sel, sel_impl};
-                unsafe {
-                    let ns_app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
-                    let windows: *mut Object = msg_send![ns_app, windows];
-                    let win_count: u64 = msg_send![windows, count];
-                    info!("[macOS Inspector Detach] Found {} windows", win_count);
-
-                    let wk_class = class!(WKWebView);
-
-                    for i in 0..win_count {
-                        let ns_win: *mut Object = msg_send![windows, objectAtIndex: i];
-                        let content_view: *mut Object = msg_send![ns_win, contentView];
-                        if content_view.is_null() {
-                            continue;
-                        }
-
-                        detach_inspector_recursive(content_view, wk_class, 0);
-                    }
-                }
-            });
-        });
-    }
-
     // 6. Layout helpers
-    fn layout_with_sidebar(w: &tauri::Window) {
+    fn layout_with_sidebar(w: &tauri::Window, app: &tauri::AppHandle) {
+        use tauri::Manager;
         let sf = w.scale_factor().unwrap_or(1.0);
         let size = w
             .inner_size()
             .unwrap_or(tauri::PhysicalSize::new(1200, 700));
-        
-        let sidebar_w_log = 260.0;
-        let toolbar_h_log = 70.0;
-        
-        let sidebar_w_phys = (sidebar_w_log * sf).round() as u32;
-        let toolbar_h_phys = (toolbar_h_log * sf).round() as u32;
-        
+        let win_pos = w.outer_position().unwrap_or(tauri::PhysicalPosition::new(0, 0));
+
+        let sidebar_w_phys = (260.0_f64 * sf).round() as u32;
+        let toolbar_h_phys = (70.0_f64 * sf).round() as u32;
+
         let content_w_phys = size.width.saturating_sub(sidebar_w_phys);
         let content_h_phys = size.height.saturating_sub(toolbar_h_phys);
 
-        use tauri::Manager;
-        
-        // 1. Toolbar: Full Width
-        if let Some(tb) = w.get_webview("toolbar-view") {
-            let _ = tb.set_position(tauri::PhysicalPosition::new(0, 0));
+        // Toolbar window: reposition + resize to follow parent
+        if let Some(tb) = app.get_webview_window("toolbar-view") {
+            let _ = tb.set_position(tauri::PhysicalPosition::new(win_pos.x, win_pos.y));
             let _ = tb.set_size(tauri::PhysicalSize::new(size.width, toolbar_h_phys));
         }
-        
-        // 2. Browser: Left Side
+
+        // Browser child webview
         if let Some(bv) = w.get_webview("browser-view") {
             let _ = bv.set_position(tauri::PhysicalPosition::new(0, toolbar_h_phys as i32));
             let _ = bv.set_size(tauri::PhysicalSize::new(content_w_phys, content_h_phys));
         }
-        
-        // 3. Sidebar: Right Side
+
+        // Sidebar child webview
         if let Some(sb) = w.get_webview("sidebar-view") {
             let _ = sb.set_position(tauri::PhysicalPosition::new(content_w_phys as i32, toolbar_h_phys as i32));
             let _ = sb.set_size(tauri::PhysicalSize::new(sidebar_w_phys, content_h_phys));
@@ -721,30 +815,56 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     }
 
     // 7. Initial Layout Pass (Immediate + Delayed for stability)
-    layout_with_sidebar(&window);
-    
+    layout_with_sidebar(&window, &app);
+
+    // When browser window is focused, bring toolbar window to front too
+    {
+        let app_focus = app.clone();
+        let tb_win = _toolbar_win.clone();
+        let _ = tb_win.clone().on_window_event(move |event| {
+            // If toolbar is focused, refocus the browser window instead
+            if let tauri::WindowEvent::Focused(true) = event {
+                if let Some(bw) = app_focus.get_webview_window("radio-browser-window") {
+                    let _ = bw.set_focus();
+                }
+            }
+        });
+    }
+
     let window_init = window.clone();
+    let app_init = app.clone();
     tauri::async_runtime::spawn(async move {
         for delay in [10, 100, 300, 600, 1000] {
             tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-            layout_with_sidebar(&window_init);
+            layout_with_sidebar(&window_init, &app_init);
         }
     });
 
-    // 8. Window resize handler
+    // 8. Window resize/move handler — keep toolbar window in sync
     let w_ev = window.clone();
+    let app_ev = app.clone();
     window.on_window_event(move |event| match event {
-        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+        tauri::WindowEvent::Resized(_)
+        | tauri::WindowEvent::Moved(_)
+        | tauri::WindowEvent::ScaleFactorChanged { .. } => {
             let w = w_ev.clone();
-            layout_with_sidebar(&w);
+            let a = app_ev.clone();
+            layout_with_sidebar(&w, &a);
 
-            let w_delayed = w.clone();
+            let w2 = w.clone();
+            let a2 = a.clone();
             tauri::async_runtime::spawn(async move {
                 for delay in [5, 50, 200, 500] {
                     tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                    layout_with_sidebar(&w_delayed);
+                    layout_with_sidebar(&w2, &a2);
                 }
             });
+        }
+        tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
+            // Close toolbar window when main browser window closes
+            if let Some(tb) = app_ev.get_webview_window("toolbar-view") {
+                let _ = tb.close();
+            }
         }
         _ => {}
     });
@@ -752,61 +872,28 @@ pub async fn open_radio_browser(app: tauri::AppHandle) -> Result<(), AppError> {
     Ok(())
 }
 
-/// macOS: Recursively walk NSView hierarchy, find WKWebViews, detach their inspector.
-#[cfg(target_os = "macos")]
-unsafe fn detach_inspector_recursive(
-    view: *mut objc::runtime::Object,
-    wk_class: &objc::runtime::Class,
-    depth: usize,
-) {
-    use objc::runtime::Object;
-    use objc::{msg_send, sel, sel_impl};
-
-    if view.is_null() || depth > 10 {
-        return;
-    }
-
-    let name = (*view).class().name().to_string();
-
-    let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
-    if is_wk {
-        info!(
-            "[Inspector Detach] Found WKWebView '{}' at depth {}",
-            name, depth
-        );
-
-        let has_attach: bool =
-            msg_send![view, respondsToSelector: sel!(_setInspectorAttachmentView:)];
-        info!(
-            "[Inspector Detach]   respondsTo _setInspectorAttachmentView: {}",
-            has_attach
-        );
-        if has_attach {
-            let nil: *mut Object = std::ptr::null_mut();
-            let _: () = msg_send![view, _setInspectorAttachmentView: nil];
-            info!("[Inspector Detach]   ✓ Done");
-        }
-    } else if depth < 4 {
-        info!("[Inspector Detach] depth {}: {}", depth, name);
-    }
-
-    let subviews: *mut Object = msg_send![view, subviews];
-    let count: u64 = msg_send![subviews, count];
-    for i in 0..count {
-        let subview: *mut Object = msg_send![subviews, objectAtIndex: i];
-        detach_inspector_recursive(subview, wk_class, depth + 1);
-    }
-}
 
 #[tauri::command]
 pub fn minimize_browser_window(app: tauri::AppHandle) {
+    use tauri::Manager;
+    
+    // Minimize browser window — toolbar will minimize automatically on macOS (child window)
     if let Some(window) = app.get_window("radio-browser-window") {
         let _ = window.minimize();
+    }
+    
+    // On non-macOS, explicitly hide toolbar
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(tb) = app.get_webview_window("toolbar-view") {
+            let _ = tb.hide();
+        }
     }
 }
 
 #[tauri::command]
 pub fn maximize_browser_window(app: tauri::AppHandle) {
+    use tauri::Manager;
     if let Some(window) = app.get_window("radio-browser-window") {
         if let Ok(is_maximized) = window.is_maximized() {
             if is_maximized {
@@ -820,7 +907,11 @@ pub fn maximize_browser_window(app: tauri::AppHandle) {
 
 #[tauri::command]
 pub fn drag_window(app: tauri::AppHandle, label: String) {
-    if let Some(window) = app.get_window(&label) {
+    use tauri::Manager;
+    // Try WebviewWindow first, then Window
+    if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.start_dragging();
+    } else if let Some(window) = app.get_window(&label) {
         let _ = window.start_dragging();
     }
 }
