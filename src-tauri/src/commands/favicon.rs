@@ -334,116 +334,77 @@ pub async fn search_images_internal(encoded_query: String) -> Result<Vec<String>
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
         .build()
         .map_err(|e: reqwest::Error| AppError::Settings(e.to_string()))?;
 
-    // Search URL with critical parameters: udm=2 (modern), imgar=s (square)
-    let url = format!(
-        "https://www.google.com/search?q={}&udm=2&imgar=s&hl=tr",
-        encoded_query
-    );
+    let url = format!("https://www.google.com/search?q={}&udm=2&imgar=s&hl=tr", encoded_query);
 
     let resp = client.get(&url)
         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-        .header("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
+        .header("Accept-Language", "tr-TR,tr;q=0.9")
+        .header("sec-ch-ua", "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"")
+        .header("sec-ch-ua-mobile", "?0")
+        .header("sec-ch-ua-platform", "\"macOS\"")
+        .header("sec-ch-ua-platform-version", "\"13.2.1\"")
+        .header("sec-ch-ua-arch", "\"arm\"")
+        .header("sec-ch-ua-bitness", "\"64\"")
+        .header("sec-fetch-dest", "document")
+        .header("sec-fetch-mode", "navigate")
+        .header("sec-fetch-site", "none")
+        .header("referer", "https://www.google.com/")
+        .header("upgrade-insecure-requests", "1")
+        .header("cookie", "NID=529=TFkj1-6yb_eR_BwWBnVfQ1EyS1nOwzA1hx7HHWDa_J17AErbXUk33DLNCnTp_-12J9W0YRiPytJsAJg8vQ-bzYHuc8pt-pCGUDPG1lSVhx-9FLSZsvMpS1v6-wtNtrpdmLsmU2oTRu7LGPW5QUCurmAGP6xlOkuzcuaeEVFc4bB2rW5KUQZqdqTSeDXMkgEua8GNZV8IrumWQ1gLDRCkYFa62wqh44997IrDyABwwvFW1cyM6jni54G3mJ89sKc")
         .send().await
         .map_err(|e: reqwest::Error| AppError::Settings(e.to_string()))?;
-    let text = resp
-        .text()
-        .await
-        .map_err(|e: reqwest::Error| AppError::Settings(e.to_string()))?;
+
+    let text = resp.text().await.map_err(|e| AppError::Settings(e.to_string()))?;
 
     let mut results = Vec::new();
-
-    // STEP 1: Extract result image IDs in PAGE ORDER from HTML
-    let mut result_ids: Vec<String> = Vec::new();
-    {
-        let mut search_idx = 0;
-        while let Some(pos) = text[search_idx..].find("max-width:225px") {
-            let abs = search_idx + pos;
-            if let Some(img_pos) = text[abs..].find("id=\"dimg_") {
-                let id_start = abs + img_pos + 4;
-                if let Some(id_end) = text[id_start..].find('"') {
-                    let img_id = text[id_start..id_start + id_end].to_string();
-                    if !result_ids.contains(&img_id) {
-                        result_ids.push(img_id);
-                    }
-                }
+    let mut result_ids = Vec::new();
+    let mut search_idx = 0;
+    while let Some(pos) = text[search_idx..].find("max-width:225px") {
+        let abs = search_idx + pos;
+        if let Some(img_pos) = text[abs..].find("id=\"dimg_") {
+            let id_start = abs + img_pos + 4;
+            if let Some(id_end) = text[id_start..].find('"') {
+                let img_id = text[id_start..id_start + id_end].to_string();
+                if !result_ids.contains(&img_id) { result_ids.push(img_id); }
             }
-            search_idx = abs + 15;
         }
+        search_idx = abs + 15;
     }
-    info!("Found {} result image IDs in page order", result_ids.len());
 
-    // STEP 2: Build a map of dimg_ID -> base64 image data from JS blocks
-    let mut id_to_image: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-    {
-        let marker = "(function(){var s='data:image/";
-        let mut search_idx = 0;
-        while let Some(pos) = text[search_idx..].find(marker) {
-            let data_start = search_idx + pos + "(function(){var s='".len();
-            if let Some(end) = text[data_start..].find("';") {
-                let mut img_data = text[data_start..data_start + end].to_string();
-
-                img_data = img_data
-                    .replace("\\x3d", "=")
-                    .replace("\\x26", "&")
-                    .replace("\\x3f", "?")
-                    .replace("\\u003d", "=")
-                    .replace("\\u0026", "&")
-                    .replace("\\/", "/");
-
-                let is_real = img_data.starts_with("data:image/jpeg")
-                    || img_data.starts_with("data:image/png")
-                    || img_data.starts_with("data:image/webp");
-
-                if is_real && img_data.len() > 500 {
-                    let after = &text[data_start + end..];
-                    if let Some(ii_pos) = after.find("var ii=[") {
-                        let ii_start = ii_pos + 8;
-                        if let Some(ii_end) = after[ii_start..].find(']') {
-                            let ids_str = &after[ii_start..ii_start + ii_end];
-                            let mut id_start = 0;
-                            while let Some(q1) = ids_str[id_start..].find('\'') {
-                                let s = id_start + q1 + 1;
-                                if let Some(q2) = ids_str[s..].find('\'') {
-                                    let the_id = ids_str[s..s + q2].to_string();
-                                    id_to_image.insert(the_id, img_data.clone());
-                                    id_start = s + q2 + 1;
-                                } else {
-                                    break;
-                                }
-                            }
+    let marker = "(function(){var s='data:image/";
+    let mut id_to_image = std::collections::HashMap::new();
+    search_idx = 0;
+    while let Some(pos) = text[search_idx..].find(marker) {
+        let data_start = search_idx + pos + "(function(){var s='".len();
+        if let Some(end) = text[data_start..].find("';") {
+            let img_data = text[data_start..data_start + end].to_string()
+                .replace("\\x3d", "=").replace("\\x26", "&").replace("\\x3f", "?")
+                .replace("\\u003d", "=").replace("\\u0026", "&").replace("\\/", "/");
+            if img_data.len() > 500 {
+                let after = &text[data_start + end..];
+                if let Some(ii_pos) = after.find("var ii=[") {
+                    let ii_start = ii_pos + 8;
+                    if let Some(ii_end) = after[ii_start..].find(']') {
+                        for id in after[ii_start..ii_start + ii_end].split('\'').filter(|s| s.starts_with("dimg_")) {
+                            id_to_image.insert(id.to_string(), img_data.clone());
                         }
                     }
                 }
-                search_idx = data_start + end;
-            } else {
-                search_idx = search_idx + pos + marker.len();
             }
-        }
-    }
-    info!("Built image map with {} entries", id_to_image.len());
-
-    // STEP 3: Return images in PAGE ORDER by looking up result IDs
-    for rid in &result_ids {
-        if let Some(img_data) = id_to_image.get(rid) {
-            if !results.contains(img_data) {
-                results.push(img_data.clone());
-            }
-        }
-        if results.len() >= 30 {
-            break;
-        }
+            search_idx = data_start + end;
+        } else { search_idx += pos + marker.len(); }
     }
 
-    info!(
-        "Found {} result images for: {}",
-        results.len(),
-        encoded_query
-    );
+    for rid in result_ids {
+        if let Some(img_data) = id_to_image.get(&rid) {
+            if !results.contains(img_data) { results.push(img_data.clone()); }
+        }
+        if results.len() >= 30 { break; }
+    }
+
     Ok(results)
 }
