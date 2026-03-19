@@ -393,12 +393,10 @@
                 });
             });
 
-            // Drag: mousedown on bar (not on interactive elements)
+            // Drag only from non-interactive background areas of the toolbar.
             document.querySelector('.bar').addEventListener('mousedown', function(e) {
-                var tag = e.target.tagName.toLowerCase();
-                if (tag === 'button' || tag === 'input' || tag === 'select') return;
-                var cl = e.target.classList;
-                if (cl.contains('btn') || cl.contains('win-btn') || cl.contains('mac-btn') || cl.contains('icon')) return;
+                var interactiveRoot = e.target.closest('button, input, select, textarea, a, .controls-group, .url-container, .window-controls, .mac-controls');
+                if (interactiveRoot) return;
                 if (e.buttons === 1) invoke('drag_window', { label: 'radio-browser-window' });
             });
             document.querySelector('.top-stripe').addEventListener('mousedown', function(e) {
