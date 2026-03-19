@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, Minus, X, Maximize2, Square } from 'lucide-react';
+import { Minus, X, Maximize2, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const win = getCurrentWindow();
@@ -51,13 +51,6 @@ export default function TitleBar({ onOpenSettings }) {
                     </div>
 
                     <div className="flex items-center justify-end w-20">
-                        <button
-                            onClick={onOpenSettings}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:bg-bg-surface-hover hover:text-white transition-all cursor-pointer"
-                            title={t('sidebar.settings')}
-                        >
-                            <Settings size={16} />
-                        </button>
                     </div>
                 </>
             ) : (
