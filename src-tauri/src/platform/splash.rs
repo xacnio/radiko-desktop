@@ -50,6 +50,48 @@ mod win32 {
         h_icon_sm: isize,
     }
     #[repr(C)]
+    struct POINT {
+        x: i32,
+        y: i32,
+    }
+    #[repr(C)]
+    struct POINTL {
+        x: i32,
+        y: i32,
+    }
+    #[repr(C)]
+    struct DEVMODEW {
+        dm_device_name: [u16; 32],
+        dm_spec_version: u16,
+        dm_driver_version: u16,
+        dm_size: u16,
+        dm_driver_extra: u16,
+        dm_fields: u32,
+        dm_position: POINTL,
+        dm_display_orientation: u32,
+        dm_display_fixed_output: u32,
+        dm_color: i16,
+        dm_duplex: i16,
+        dm_y_resolution: i16,
+        dm_tt_option: i16,
+        dm_collate: i16,
+        dm_form_name: [u16; 32],
+        dm_log_pixels: u16,
+        dm_bits_per_pel: u32,
+        dm_pels_width: u32,
+        dm_pels_height: u32,
+        dm_display_flags: u32,
+        dm_display_frequency: u32,
+        dm_icm_method: u32,
+        dm_icm_intent: u32,
+        dm_media_type: u32,
+        dm_dither_type: u32,
+        dm_reserved1: u32,
+        dm_reserved2: u32,
+        dm_panning_width: u32,
+        dm_panning_height: u32,
+    }
+    #[repr(C)]
     struct MSG {
         hwnd: HWND,
         message: UINT,
@@ -131,6 +173,12 @@ mod win32 {
         fn DefWindowProcW(h: HWND, msg: UINT, w: WPARAM, l: LPARAM) -> LRESULT;
         fn PostQuitMessage(code: i32);
         fn GetSystemMetrics(idx: i32) -> i32;
+        fn EnumDisplaySettingsW(device_name: *const u16, mode_num: u32, dev_mode: *mut DEVMODEW) -> BOOL;
+        fn MonitorFromPoint(pt: POINT, flags: u32) -> isize;
+        fn GetDpiForMonitor(monitor: isize, dpi_type: i32, dpi_x: *mut u32, dpi_y: *mut u32) -> i32;
+        fn SetThreadDpiAwarenessContext(dpi_context: isize) -> isize;
+        fn GetDpiForSystem() -> u32;
+        fn MulDiv(number: i32, numerator: i32, denominator: i32) -> i32;
         fn PostMessageW(h: HWND, msg: UINT, w: WPARAM, l: LPARAM) -> BOOL;
         fn BeginPaint(h: HWND, ps: *mut PAINTSTRUCT) -> HDC;
         fn EndPaint(h: HWND, ps: *const PAINTSTRUCT) -> BOOL;
@@ -207,12 +255,67 @@ mod win32 {
         fn GetLocaleInfoW(locale: u32, lctype: u32, data: *mut u16, len: i32) -> i32;
     }
 
+    const MONITOR_DEFAULTTOPRIMARY: u32 = 1;
+    const MDT_EFFECTIVE_DPI: i32 = 0;
+
     fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
         r as u32 | (g as u32) << 8 | (b as u32) << 16
     }
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
+    fn physical_screen_size() -> Option<(i32, i32)> {
+        let mut dev_mode: DEVMODEW = unsafe { std::mem::zeroed() };
+        dev_mode.dm_size = std::mem::size_of::<DEVMODEW>() as u16;
+        let ok = unsafe { EnumDisplaySettingsW(std::ptr::null(), 0xFFFF_FFFF, &mut dev_mode) };
+        if ok == 0 {
+            return None;
+        }
+        let width = dev_mode.dm_pels_width as i32;
+        let height = dev_mode.dm_pels_height as i32;
+        if width > 0 && height > 0 {
+            Some((width, height))
+        } else {
+            None
+        }
+    }
+    fn current_dpi() -> i32 {
+        let center = POINT {
+            x: unsafe { GetSystemMetrics(0) } / 2,
+            y: unsafe { GetSystemMetrics(1) } / 2,
+        };
+        let monitor = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTOPRIMARY) };
+        if monitor != 0 {
+            let mut dpi_x = 0u32;
+            let mut dpi_y = 0u32;
+            let hr = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
+            if hr == 0 && dpi_x > 0 {
+                return dpi_x as i32;
+            }
+        }
+        if let Some((physical_w, _)) = physical_screen_size() {
+            let logical_w = unsafe { GetSystemMetrics(0) };
+            if logical_w > 0 && physical_w >= logical_w {
+                return unsafe { MulDiv(96, physical_w, logical_w) };
+            }
+        }
+        let dpi = unsafe { GetDpiForSystem() } as i32;
+        if dpi > 0 { dpi } else { 96 }
+    }
+    fn scale_px(value: i32) -> i32 {
+        unsafe { MulDiv(value, current_dpi(), 96) }
+    }
+    fn splash_px(value: i32) -> i32 {
+        let dpi = current_dpi();
+        let extra_percent = if dpi > 96 {
+            100 + ((dpi - 96) * 12 / 24)
+        } else {
+            100
+        };
+        unsafe { MulDiv(scale_px(value), extra_percent, 100) }
+    }
+
+    const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: isize = -4isize;
 
     static mut TICK: u32 = 0;
     static mut ICON_DC: HDC = 0;
@@ -255,9 +358,6 @@ mod win32 {
                 if lang_code.is_empty() {
                     lang_code = "en".to_string();
                 }
-                println!("[SPLASH] System generic language detected: {}", lang_code);
-            } else {
-                println!("[SPLASH] Settings file language detected: {}", lang_code);
             }
 
             // Get translation from embedded JSONs dynamically
@@ -402,9 +502,9 @@ mod win32 {
         let face = wide("Segoe UI");
 
         // ── icon (40×40, centered) ──────────────────────────────────────
-        let logo_size: i32 = 40;
+        let logo_size = splash_px(40);
         let logo_x = cx - logo_size / 2;
-        let logo_y: i32 = 16;
+        let logo_y = splash_px(20);
 
         if ICON_DC != 0 {
             SetStretchBltMode(hdc, 4); // HALFTONE
@@ -414,15 +514,15 @@ mod win32 {
         }
 
         // ── title ───────────────────────────────────────────────────────
-        let fnt = CreateFontW(-18, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, face.as_ptr());
+        let fnt = CreateFontW(-splash_px(18), 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, face.as_ptr());
         let old_fnt = SelectObject(hdc, fnt);
         SetTextColor(hdc, rgb(240, 240, 240));
         let title = wide("Radiko Desktop");
         let mut tr = RECT {
             left: 0,
-            top: 62,
+            top: splash_px(70),
             right: rc.right,
-            bottom: 86,
+            bottom: splash_px(96),
         };
         DrawTextW(
             hdc,
@@ -440,14 +540,14 @@ mod win32 {
             _ => "...",
         };
         let sub = wide(&format!("{}{}", get_loading_text(), dots));
-        let fnt2 = CreateFontW(-12, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, face.as_ptr());
+        let fnt2 = CreateFontW(-splash_px(13), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, face.as_ptr());
         SelectObject(hdc, fnt2);
         SetTextColor(hdc, rgb(110, 110, 110));
         let mut sr = RECT {
             left: 0,
-            top: 90,
+            top: splash_px(102),
             right: rc.right,
-            bottom: 108,
+            bottom: splash_px(122),
         };
         DrawTextW(
             hdc,
@@ -458,10 +558,10 @@ mod win32 {
         );
 
         // ── progress bar ────────────────────────────────────────────────
-        let tw = 200;
-        let th = 3;
+        let tw = splash_px(236);
+        let th = splash_px(5).max(4);
         let tl = cx - tw / 2;
-        let ty = 120;
+        let ty = splash_px(132);
         let track = RECT {
             left: tl,
             top: ty,
@@ -472,7 +572,7 @@ mod win32 {
         FillRect(hdc, &track, tbr);
         DeleteObject(tbr);
 
-        let iw = 60;
+        let iw = splash_px(86);
         let max_pos = (tw - iw) as f32;
         let t = (TICK % 100) as f32 / 100.0;
         let lin = if t < 0.5 { t * 2.0 } else { (1.0 - t) * 2.0 };
@@ -509,6 +609,7 @@ mod win32 {
         pub fn show() -> Option<Self> {
             let (tx, rx) = mpsc::channel();
             std::thread::spawn(move || unsafe {
+                SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
                 let hi = GetModuleHandleW(std::ptr::null());
 
                 // Load icon PNG from embedded bytes
@@ -535,16 +636,21 @@ mod win32 {
                 };
                 RegisterClassExW(&wc);
 
-                let (w, h) = (340, 148);
-                let sx = GetSystemMetrics(0);
-                let sy = GetSystemMetrics(1);
+                let w = splash_px(360);
+                let h = splash_px(156);
+                let logical_sx = GetSystemMetrics(0);
+                let logical_sy = GetSystemMetrics(1);
+                let (sx, sy) = physical_screen_size()
+                    .unwrap_or((logical_sx, logical_sy));
+                let x = (sx - w) / 2;
+                let y = (sy - h) / 2;
                 let hwnd = CreateWindowExW(
                     WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                     cls.as_ptr(),
                     std::ptr::null(),
                     WS_POPUP,
-                    (sx - w) / 2,
-                    (sy - h) / 2,
+                    x,
+                    y,
                     w,
                     h,
                     0,
@@ -557,7 +663,8 @@ mod win32 {
                     return;
                 }
 
-                let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, 14, 14);
+                let radius = splash_px(14);
+                let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius, radius);
                 SetWindowRgn(hwnd, rgn, 0);
                 ShowWindow(hwnd, 5);
                 UpdateWindow(hwnd);
