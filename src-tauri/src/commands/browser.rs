@@ -13,37 +13,36 @@ static LINK_VIEW_WIDTH: std::sync::atomic::AtomicU32 = std::sync::atomic::Atomic
 pub fn internal_layout_link_view(w: &tauri::WebviewWindow) {
     use tauri::Manager;
     if let Some(lv) = w.get_webview("link-view") {
-        let sf = w.scale_factor().unwrap_or(1.0);
-        let size = w
-            .inner_size()
-            .unwrap_or(tauri::PhysicalSize::new(1200, 800));
-
-        let width_px = LINK_VIEW_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
-        let resizer_gutter = (7.0 * sf).round() as u32;
-        let link_view_w = (width_px as f64 * sf).round() as u32;
-        let titlebar_h = (38.0 * sf).round() as u32;
-        let header_h = (40.0 * sf).round() as u32;
-        let mini_player_h = (100.0 * sf).round() as u32;
-
-        let view_x = size.width.saturating_sub(link_view_w) + resizer_gutter;
-        let view_y = titlebar_h + header_h;
-        let view_h = size.height.saturating_sub(view_y + mini_player_h);
-
-        let final_w = link_view_w.saturating_sub(resizer_gutter);
-
-        let _ = lv.set_position(tauri::PhysicalPosition::new(view_x, view_y));
-        let _ = lv.set_size(tauri::PhysicalSize::new(final_w, view_h));
+        layout_link_view_inner(&lv, w.scale_factor().unwrap_or(1.0), w.inner_size().unwrap_or(tauri::PhysicalSize::new(1200, 800)));
     }
+}
+
+fn layout_link_view_inner(lv: &tauri::Webview<impl tauri::Runtime>, sf: f64, size: tauri::PhysicalSize<u32>) {
+    let width_px = LINK_VIEW_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
+    let resizer_gutter = (7.0_f64 * sf).round() as u32;
+    let link_view_w = (width_px as f64 * sf).round() as u32;
+    let titlebar_h = (38.0_f64 * sf).round() as u32;
+    let header_h = (40.0_f64 * sf).round() as u32;
+    let mini_player_h = (100.0_f64 * sf).round() as u32;
+
+    let view_x = size.width.saturating_sub(link_view_w) + resizer_gutter;
+    let view_y = titlebar_h + header_h;
+    let view_h = size.height.saturating_sub(view_y + mini_player_h);
+    let final_w = link_view_w.saturating_sub(resizer_gutter);
+
+    let _ = lv.set_position(tauri::PhysicalPosition::new(view_x, view_y));
+    let _ = lv.set_size(tauri::PhysicalSize::new(final_w, view_h));
 }
 
 #[tauri::command]
 pub fn update_link_view_width(app: tauri::AppHandle, width: u32) {
     use tauri::Manager;
     LINK_VIEW_WIDTH.store(width, std::sync::atomic::Ordering::Relaxed);
-    if let Some(main_win) = app.get_webview_window("main") {
-        internal_layout_link_view(&main_win);
-    } else {
-        println!("UPDATE_WIDTH: ERROR - Main window not found!");
+    if let Some(lv) = app.get_webview("link-view") {
+        let parent = lv.window();
+        let sf = parent.scale_factor().unwrap_or(1.0);
+        let size = parent.inner_size().unwrap_or(tauri::PhysicalSize::new(1200, 800));
+        layout_link_view_inner(&lv, sf, size);
     }
 }
 
@@ -127,17 +126,17 @@ pub async fn open_link_window(app: tauri::AppHandle, url: String) -> Result<(), 
         .unwrap_or(tauri::PhysicalSize::new(1200, 800));
 
     let width_px = LINK_VIEW_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
-    let resizer_gutter = (6.0 * sf).round() as u32;
+    let resizer_gutter = (6.0_f64 * sf).round() as u32;
     let link_view_w = (width_px as f64 * sf).round() as u32;
-    let titlebar_h = (38.0 * sf).round() as u32;
-    let header_h = (40.0 * sf).round() as u32;
-    let mini_player_h = (100.0 * sf).round() as u32;
+    let titlebar_h = (38.0_f64 * sf).round() as u32;
+    let header_h = (40.0_f64 * sf).round() as u32;
+    let mini_player_h = (100.0_f64 * sf).round() as u32;
 
     let view_x = size.width.saturating_sub(link_view_w) + resizer_gutter;
     let view_y = titlebar_h + header_h;
     let view_h = size.height.saturating_sub(view_y + mini_player_h);
 
-    let app_handle = app.clone();
+    let _app_handle = app.clone();
     let autoplay_disabler_js = r#"
         (function() {
             const prevent = (el) => {
@@ -158,14 +157,21 @@ pub async fn open_link_window(app: tauri::AppHandle, url: String) -> Result<(), 
         .add_child(
             WebviewBuilder::new("link-view", WebviewUrl::External(parsed_url))
                 .initialization_script(autoplay_disabler_js)
-                .on_navigation(move |url| {
-                    let _ = app_handle.emit("link-view-navigate", url.to_string());
+                .on_navigation(move |_url| {
+                    // Allow all navigation, URL update happens on page load
                     true
                 })
                 .on_page_load(move |webview, payload| {
                     if payload.event() == tauri::webview::PageLoadEvent::Finished {
                         let _ = webview.set_zoom(0.8);
                         let _ = webview.eval(&scrollbar_css_clone);
+                        // Emit the actual final URL after page load (avoids intermediate resource URLs)
+                        if let Ok(url) = webview.url() {
+                            let url_str = url.to_string();
+                            if url_str.starts_with("http://") || url_str.starts_with("https://") {
+                                let _ = webview.app_handle().emit("link-view-navigate", url_str);
+                            }
+                        }
                     }
                 }),
             tauri::PhysicalPosition::new(view_x, view_y),

@@ -997,6 +997,7 @@ function AppInner({ isPlayerHorizontal, setIsPlayerHorizontal, linkViewOpen, set
 
     const getHostname = (url) => {
         try {
+            if (!url || url.startsWith('tauri://') || url.startsWith('about:') || url.startsWith('data:')) return '';
             return new URL(url).hostname.replace('www.', '');
         } catch {
             return '';
