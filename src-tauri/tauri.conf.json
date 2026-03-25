@@ -27,7 +27,11 @@
             }
         },
         "macOS": {
-            "infoPlist": "<key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>"
+            "infoPlist": {
+                "NSAppTransportSecurity": {
+                    "NSAllowsArbitraryLoads": true
+                }
+            }
         }
     },
     "app": {
