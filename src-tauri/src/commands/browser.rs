@@ -165,7 +165,6 @@ pub async fn open_link_window(app: tauri::AppHandle, url: String) -> Result<(), 
                     if payload.event() == tauri::webview::PageLoadEvent::Finished {
                         let _ = webview.set_zoom(0.8);
                         let _ = webview.eval(&scrollbar_css_clone);
-                        // Emit the actual final URL after page load (avoids intermediate resource URLs)
                         if let Ok(url) = webview.url() {
                             let url_str = url.to_string();
                             if url_str.starts_with("http://") || url_str.starts_with("https://") {
@@ -189,7 +188,10 @@ pub async fn open_link_window(app: tauri::AppHandle, url: String) -> Result<(), 
 pub fn close_link_view(app: tauri::AppHandle) {
     use tauri::{Emitter, Manager};
     if let Some(wv) = app.get_webview("link-view") {
-        let _ = wv.close();
+        // Close must happen on main thread on macOS
+        let _ = wv.clone().run_on_main_thread(move || {
+            let _ = wv.close();
+        });
     }
     let _ = app.emit("link-view-hide", ());
 }

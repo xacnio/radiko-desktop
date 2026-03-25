@@ -359,6 +359,9 @@
     },
     "app": {
         "browser": "Browser",
+        "httpWarningTitle": "Unsichere Verbindung",
+        "httpWarningMsg": "Diese Website verwendet keine verschlüsselte Verbindung (HTTPS).\n{{url}}",
+        "httpWarningConfirm": "Trotzdem öffnen",
         "success": "Erfolg",
         "openInBrowser": "Im Systembrowser öffnen",
         "close": "Schließen",

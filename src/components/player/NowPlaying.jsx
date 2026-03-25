@@ -5,6 +5,8 @@ import { toAssetUrl } from '../../utils';
 import { useTranslation } from 'react-i18next';
 import { Radio, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, SlidersHorizontal, X, Globe, Users, Headphones, Loader2, Search, Music, RefreshCw, PanelRight, PanelBottom } from 'lucide-react';
 import EqualizerPanel from './EqualizerPanel';
+import { useHttpLink } from '../../hooks/useHttpLink';
+
 
 // Per-band multipliers to simulate an EQ shape from a single RMS level
 const BAND_WEIGHTS = [0.8, 1.0, 0.9, 0.7, 0.6, 0.5, 0.35];
@@ -122,6 +124,7 @@ export default function NowPlaying({
     showIdentifyModal, setShowIdentifyModal, handleIdentify, avgColor, isActuallyLight
 }) {
     const { t } = useTranslation();
+    const { openLink, modal: httpModal } = useHttpLink(t);
     const isPlaying = status === 'playing';
     const isConnecting = status === 'connecting' || status === 'reconnecting';
     const isPaused = status === 'paused';
@@ -604,7 +607,7 @@ export default function NowPlaying({
                                         </span>
                                     )}
                                     {streamMetadata?.icy_url && (
-                                        <button onClick={() => invoke('open_link_window', { url: streamMetadata.icy_url.startsWith('http') ? streamMetadata.icy_url : `http://${streamMetadata.icy_url}` })}
+                                        <button onClick={() => openLink(streamMetadata.icy_url.startsWith('http') ? streamMetadata.icy_url : `https://${streamMetadata.icy_url}`)}
                                             className="shrink-0 w-5 h-5 rounded-full bg-bg-secondary/50 hover:bg-bg-secondary/80 border border-border/50 text-text-secondary hover:text-text-primary transition-all flex items-center justify-center cursor-pointer shadow-sm" title="Website">
                                             <Globe size={11} />
                                         </button>
@@ -976,7 +979,7 @@ export default function NowPlaying({
                                             </div>
                                             <div className="flex gap-2 mt-1">
                                                 {identifyResult.song_link && (
-                                                    <button onClick={() => invoke('open_link_window', { url: identifyResult.song_link })}
+                                                    <button onClick={() => openLink(identifyResult.song_link)}
                                                         className="px-3 py-1.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider hover:bg-accent/20 transition-all cursor-pointer">
                                                         {t('identify.listen')}
                                                     </button>
@@ -1008,6 +1011,7 @@ export default function NowPlaying({
                     </div>
                 )
             }
+            {httpModal}
         </aside >
     );
 }

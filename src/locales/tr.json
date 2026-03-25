@@ -359,6 +359,9 @@
     },
     "app": {
         "browser": "Tarayıcı",
+        "httpWarningTitle": "Güvensiz Bağlantı",
+        "httpWarningMsg": "Bu site şifreli bağlantı (HTTPS) kullanmıyor.\n{{url}}",
+        "httpWarningConfirm": "Yine de Aç",
         "success": "Başarılı",
         "openInBrowser": "Sistem Tarayıcısında Aç",
         "close": "Kapat",

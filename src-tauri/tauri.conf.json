@@ -25,6 +25,9 @@
                 "displayLanguageSelector": false,
                 "installMode": "currentUser"
             }
+        },
+        "macOS": {
+            "infoPlist": "<key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>"
         }
     },
     "app": {

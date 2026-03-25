@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect, useMemo } from 'react';
 import ConfirmModal from '../common/ConfirmModal';
 import { useTranslation } from 'react-i18next';
+import { useHttpLink } from '../../hooks/useHttpLink';
+
 
 function timeAgo(dateStr, t) {
     const now = new Date();
@@ -18,6 +20,7 @@ function timeAgo(dateStr, t) {
 
 export default function IdentifiedSongsList({ songs, onClear, onDeleteSong }) {
     const { t } = useTranslation();
+    const { openLink, modal: httpModal } = useHttpLink(t);
     const [ctxMenu, setCtxMenu] = useState(null);
     const [isClearModalOpen, setIsClearModalOpen] = useState(false);
 
@@ -225,7 +228,7 @@ export default function IdentifiedSongsList({ songs, onClear, onDeleteSong }) {
                                     key={i}
                                     onClick={() => {
                                         const primaryLink = song.sources?.[0]?.link || song.song_link;
-                                        if (primaryLink) invoke('open_link_window', { url: primaryLink });
+                                        if (primaryLink) openLink(primaryLink);
                                     }}
                                     onContextMenu={(e) => handleCtx(e, song)}
                                     className="group flex items-center gap-4 px-3 py-2.5 rounded-lg cursor-pointer transition-all hover:bg-bg-surface-hover active:scale-[0.98]"
@@ -257,7 +260,7 @@ export default function IdentifiedSongsList({ songs, onClear, onDeleteSong }) {
                                                         key={src.name}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            invoke('open_link_window', { url: src.link });
+                                                            openLink(src.link);
                                                         }}
                                                         className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-bold transition-all border ${src.name === 'Shazam'
                                                             ? 'bg-success/5 hover:bg-success/20 text-success border-success/10 hover:border-success/30'
@@ -315,6 +318,7 @@ export default function IdentifiedSongsList({ songs, onClear, onDeleteSong }) {
                 cancelText={t('identified_songs.cancel')}
                 variant="danger"
             />
+            {httpModal}
         </div>
     );
 }

@@ -359,6 +359,9 @@
     },
     "app": {
         "browser": "Browser",
+        "httpWarningTitle": "Insecure Connection",
+        "httpWarningMsg": "This site does not use an encrypted connection (HTTPS).\n{{url}}",
+        "httpWarningConfirm": "Open Anyway",
         "success": "Success",
         "openInBrowser": "Open in System Browser",
         "close": "Close",
