@@ -268,6 +268,25 @@ pub fn await_frontend_and_close_splash(
 
     std::thread::spawn(move || {
         let show_and_close_splash = |handle: &tauri::AppHandle| {
+            // Ensure window is within visible screen bounds (fixes off-screen issue on Windows)
+            #[cfg(target_os = "windows")]
+            {
+                if let (Ok(pos), Ok(size)) = (poll_win.outer_position(), poll_win.outer_size()) {
+                    let monitors = poll_win.available_monitors().unwrap_or_default();
+                    let on_screen = monitors.iter().any(|m| {
+                        let mp = m.position();
+                        let ms = m.size();
+                        pos.x < mp.x + ms.width as i32
+                            && pos.x + size.width as i32 > mp.x
+                            && pos.y < mp.y + ms.height as i32
+                            && pos.y + size.height as i32 > mp.y
+                    });
+                    if !on_screen {
+                        tracing::warn!("Window is off-screen, centering");
+                        let _ = poll_win.center();
+                    }
+                }
+            }
             // Show main window and grab focus FIRST
             let _ = poll_win.show();
             let _ = poll_win.set_focus();
