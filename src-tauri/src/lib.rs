@@ -82,27 +82,51 @@ pub fn run() {
                 tracing::error!("Failed to initialize tray: {}", e);
             }
 
-            // 11. OFF-SCREEN FIX (Windows only)
-            // Win+D and multi-monitor changes can leave the window off-screen.
-            // Listen for focus events and re-center if needed.
+            // 11. OFF-SCREEN / WRONG-SIZE FIX (Windows only)
+            // Win+D with decorations:false causes window to restore with wrong size/position.
+            // Save last known good size, and restore it if window gets corrupted.
             #[cfg(target_os = "windows")]
             if let Some(main_win) = app.get_webview_window("main") {
+                use std::sync::{Arc, Mutex};
                 let win = main_win.clone();
+                let last_good = Arc::new(Mutex::new(Option::<(tauri::PhysicalSize<u32>, tauri::PhysicalPosition<i32>)>::None));
+                let last_good_clone = Arc::clone(&last_good);
                 main_win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(true) = event {
-                        if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
-                            let monitors = win.available_monitors().unwrap_or_default();
-                            let on_screen = monitors.iter().any(|m| {
-                                let mp = m.position();
-                                let ms = m.size();
-                                pos.x < mp.x + ms.width as i32
-                                    && pos.x + size.width as i32 > mp.x
-                                    && pos.y < mp.y + ms.height as i32
-                                    && pos.y + size.height as i32 > mp.y
-                            });
-                            if !on_screen {
-                                tracing::warn!("Window focused but off-screen, centering");
-                                let _ = win.center();
+                    if let tauri::WindowEvent::Resized(_) = event {
+                        if win.is_minimized().unwrap_or(false) {
+                            return;
+                        }
+                        if let (Ok(size), Ok(pos)) = (win.outer_size(), win.outer_position()) {
+                            let sf = win.scale_factor().unwrap_or(1.0);
+                            let min_w_phys = (650f64 * sf) as u32;
+                            let min_h_phys = (600f64 * sf) as u32;
+
+                            if size.width >= min_w_phys && size.height >= min_h_phys {
+                                // Valid size - save it
+                                let monitors = win.available_monitors().unwrap_or_default();
+                                let on_screen = monitors.iter().any(|m| {
+                                    let mp = m.position();
+                                    let ms = m.size();
+                                    pos.x < mp.x + ms.width as i32
+                                        && pos.x + size.width as i32 > mp.x
+                                        && pos.y < mp.y + ms.height as i32
+                                        && pos.y + size.height as i32 > mp.y
+                                });
+                                if on_screen {
+                                    *last_good_clone.lock().unwrap() = Some((size, pos));
+                                }
+                            } else {
+                                // Corrupted size - restore last known good
+                                tracing::warn!("Window corrupted to {:?}, restoring last known size", size);
+                                let saved = last_good_clone.lock().unwrap().clone();
+                                if let Some((saved_size, saved_pos)) = saved {
+                                    let _ = win.set_size(saved_size);
+                                    let _ = win.set_position(saved_pos);
+                                } else {
+                                    // No saved state yet, just center with minimum size
+                                    let _ = win.set_size(tauri::PhysicalSize::new(min_w_phys, min_h_phys));
+                                    let _ = win.center();
+                                }
                             }
                         }
                     }
