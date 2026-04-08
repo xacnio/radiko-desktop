@@ -82,6 +82,33 @@ pub fn run() {
                 tracing::error!("Failed to initialize tray: {}", e);
             }
 
+            // 11. OFF-SCREEN FIX (Windows only)
+            // Win+D and multi-monitor changes can leave the window off-screen.
+            // Listen for focus events and re-center if needed.
+            #[cfg(target_os = "windows")]
+            if let Some(main_win) = app.get_webview_window("main") {
+                let win = main_win.clone();
+                main_win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(true) = event {
+                        if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
+                            let monitors = win.available_monitors().unwrap_or_default();
+                            let on_screen = monitors.iter().any(|m| {
+                                let mp = m.position();
+                                let ms = m.size();
+                                pos.x < mp.x + ms.width as i32
+                                    && pos.x + size.width as i32 > mp.x
+                                    && pos.y < mp.y + ms.height as i32
+                                    && pos.y + size.height as i32 > mp.y
+                            });
+                            if !on_screen {
+                                tracing::warn!("Window focused but off-screen, centering");
+                                let _ = win.center();
+                            }
+                        }
+                    }
+                });
+            }
+
             // 9. AUDIO DEVICE MONITOR (Windows only)
             #[cfg(target_os = "windows")]
             {
